@@ -51,3 +51,7 @@ data/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# claude
+.claude/worktrees/
+.claude/settings.local.json
