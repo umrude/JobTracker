@@ -2,17 +2,18 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
-import { getMode } from "@/server/mode";
+import { env } from "@/server/env";
 
 // The DAL-style auth check recommended by Next.js: call this close to the
 // data (in each page/Server Action), not only in a layout -- a layout's
 // check doesn't re-run on client-side navigation between sibling routes.
 // cache() dedupes repeated calls within one render pass.
 //
-// In demo mode, auth is skipped entirely (per CLAUDE.md): there's no
-// Google sign-in, so this returns null instead of redirecting.
+// Keyed off the deployment env var, not getMode(): a cookie-toggled local
+// demo preview still runs on a live deployment and must still require a
+// real session -- the cookie is just a UI preference, not a trust boundary.
 export const requireSession = cache(async () => {
-  if (getMode() === "demo") return null;
+  if (env.DEMO_MODE) return null;
 
   const session = await auth();
   if (!session?.user) {

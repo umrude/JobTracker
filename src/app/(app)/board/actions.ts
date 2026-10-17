@@ -28,7 +28,7 @@ export async function addApplicationAction(formData: FormData) {
     status: formData.get("status") || undefined,
   });
 
-  createApplication(input);
+  await createApplication(input);
   revalidatePath("/board");
 }
 
@@ -45,7 +45,7 @@ export async function editApplicationAction(formData: FormData) {
     status: formData.get("status") || undefined,
   });
 
-  updateApplication(input);
+  await updateApplication(input);
   revalidatePath("/board");
 }
 
@@ -55,7 +55,7 @@ export async function moveApplicationAction(id: number, status: string) {
 
   const input = moveApplicationSchema.parse({ id, status });
 
-  moveApplicationStatus(input.id, input.status);
+  await moveApplicationStatus(input.id, input.status);
   revalidatePath("/board");
 }
 
@@ -65,6 +65,6 @@ export async function deleteApplicationAction(formData: FormData) {
 
   const input = deleteApplicationSchema.parse({ id: formData.get("id") });
 
-  deleteApplication(input.id);
+  await deleteApplication(input.id);
   revalidatePath("/board");
 }

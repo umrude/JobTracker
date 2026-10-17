@@ -4,6 +4,7 @@
 // "server-only", which throws unconditionally outside Next's bundler.
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -11,7 +12,14 @@ import * as schema from "@/server/db/schema";
 import { DEMO_DB_PATH } from "@/server/db/paths";
 import type { Status } from "@/lib/schemas/status";
 
-const MIGRATIONS_FOLDER = path.join(import.meta.dirname, "migrations");
+// process.cwd()-relative, not import.meta.dirname: this module runs both
+// directly under tsx (pnpm db:seed) and dynamically imported inside a
+// Turbopack-bundled chunk (src/instrumentation.ts's register()), and
+// import.meta.dirname comes back undefined in the latter.
+const MIGRATIONS_FOLDER = path.join(
+  process.cwd(),
+  "src/server/db/migrations",
+);
 
 function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -166,7 +174,10 @@ const SEED_APPLICATIONS: SeedApplication[] = [
   },
 ];
 
-function main() {
+// Reusable by both the CLI entry point below and instrumentation.ts (which
+// reseeds on every dev-server restart so the local "writable demo preview"
+// cookie toggle always starts from a clean, known state).
+export function seedDemoDatabase(): number {
   fs.rmSync(DEMO_DB_PATH, { force: true });
   fs.mkdirSync(path.dirname(DEMO_DB_PATH), { recursive: true });
 
@@ -203,9 +214,17 @@ function main() {
   }
 
   sqlite.close();
-  console.log(
-    `Seeded ${SEED_APPLICATIONS.length} applications into ${DEMO_DB_PATH}`,
-  );
+  return SEED_APPLICATIONS.length;
 }
 
-main();
+// CLI entry point (`pnpm db:seed`). Guarded so importing seedDemoDatabase()
+// elsewhere (instrumentation.ts) doesn't also run this. Compared as file://
+// URLs, not raw path strings -- process.argv[1] is a plain OS path (with
+// backslashes on Windows), which never string-equals import.meta.url.
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  const count = seedDemoDatabase();
+  console.log(`Seeded ${count} applications into ${DEMO_DB_PATH}`);
+}

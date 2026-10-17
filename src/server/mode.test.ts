@@ -5,30 +5,41 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockEnv = vi.hoisted(() => ({ DEMO_MODE: false }));
 vi.mock("@/server/env", () => ({ env: mockEnv }));
 
-import { getMode, assertWritable } from "@/server/mode";
+import { assertWritable, isWritable, resolveMode } from "@/server/mode";
 
 beforeEach(() => {
   mockEnv.DEMO_MODE = false;
 });
 
-describe("getMode", () => {
-  it("returns live when DEMO_MODE is false", () => {
-    expect(getMode()).toBe("live");
+describe("resolveMode", () => {
+  it("is live when DEMO_MODE is false and no cookie is set", () => {
+    expect(resolveMode(false, undefined)).toBe("live");
   });
 
-  it("returns demo when DEMO_MODE is true", () => {
-    mockEnv.DEMO_MODE = true;
-    expect(getMode()).toBe("demo");
+  it("is demo when the cookie is set, on a live deployment", () => {
+    expect(resolveMode(false, "true")).toBe("demo");
+  });
+
+  it("ignores the cookie on a public demo deployment", () => {
+    expect(resolveMode(true, undefined)).toBe("demo");
+    expect(resolveMode(true, "true")).toBe("demo");
+  });
+
+  it("treats any cookie value other than the literal 'true' as unset", () => {
+    expect(resolveMode(false, "false")).toBe("live");
+    expect(resolveMode(false, "")).toBe("live");
   });
 });
 
-describe("assertWritable", () => {
-  it("does not throw in live mode", () => {
+describe("isWritable / assertWritable", () => {
+  it("is writable on a live deployment", () => {
+    expect(isWritable()).toBe(true);
     expect(() => assertWritable()).not.toThrow();
   });
 
-  it("throws in demo mode", () => {
+  it("is not writable on a public demo deployment", () => {
     mockEnv.DEMO_MODE = true;
+    expect(isWritable()).toBe(false);
     expect(() => assertWritable()).toThrow(/demo mode/i);
   });
 });

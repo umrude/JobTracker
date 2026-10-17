@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { getMode } from "@/server/mode";
+import { env } from "@/server/env";
 import { auth, signIn } from "@/server/auth";
 
 export default async function LoginPage({
   searchParams,
 }: PageProps<"/login">) {
   // Nothing to log into in a demo deployment: there's no session to have.
-  if (getMode() === "demo") {
+  if (env.DEMO_MODE) {
     redirect("/board");
   }
 
