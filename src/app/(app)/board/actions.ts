@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { assertWritable } from "@/server/mode";
+import { requireSession } from "@/server/require-session";
 import {
   createApplication,
   deleteApplication,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/schemas/application";
 
 export async function addApplicationAction(formData: FormData) {
+  await requireSession();
   assertWritable();
 
   const input = createApplicationSchema.parse({
@@ -31,6 +33,7 @@ export async function addApplicationAction(formData: FormData) {
 }
 
 export async function editApplicationAction(formData: FormData) {
+  await requireSession();
   assertWritable();
 
   const input = updateApplicationSchema.parse({
@@ -47,6 +50,7 @@ export async function editApplicationAction(formData: FormData) {
 }
 
 export async function moveApplicationAction(id: number, status: string) {
+  await requireSession();
   assertWritable();
 
   const input = moveApplicationSchema.parse({ id, status });
@@ -56,6 +60,7 @@ export async function moveApplicationAction(id: number, status: string) {
 }
 
 export async function deleteApplicationAction(formData: FormData) {
+  await requireSession();
   assertWritable();
 
   const input = deleteApplicationSchema.parse({ id: formData.get("id") });

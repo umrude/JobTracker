@@ -1,11 +1,14 @@
 import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getMode } from "@/server/mode";
+import { requireSession } from "@/server/require-session";
 import { listApplicationsWithJob } from "@/server/db/applications";
 import { Board } from "./_components/board";
 import { ApplicationForm } from "./_components/application-form";
 
-export default function BoardPage() {
+export default async function BoardPage() {
+  await requireSession();
+
   const mode = getMode();
   const disabled = mode === "demo";
   const applications = listApplicationsWithJob();
