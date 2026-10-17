@@ -4,7 +4,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { env } from "@/server/env";
-import { getMode, type Mode } from "@/server/mode";
+import type { Mode } from "@/server/mode";
 import * as schema from "@/server/db/schema";
 import { DEMO_DB_PATH } from "@/server/db/paths";
 
@@ -27,7 +27,9 @@ function openDb(dbPath: string): DbInstance {
 // the live SQLite file in live mode and the seeded demo file in demo mode,
 // caching one connection per mode so repeated calls (e.g. across Server
 // Components in the same request) reuse it instead of reopening the file.
-export function getDb(mode: Mode = getMode()): DbInstance {
+// Takes mode explicitly (instead of defaulting to getMode()) since getMode()
+// is async -- a default parameter can't await it.
+export function getDb(mode: Mode): DbInstance {
   const cached = instances.get(mode);
   if (cached) return cached;
 

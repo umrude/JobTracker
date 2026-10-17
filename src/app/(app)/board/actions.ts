@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { assertWritable } from "@/server/mode";
+import { requireSession } from "@/server/require-session";
 import {
   createApplication,
   deleteApplication,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/schemas/application";
 
 export async function addApplicationAction(formData: FormData) {
+  await requireSession();
   assertWritable();
 
   const input = createApplicationSchema.parse({
@@ -26,11 +28,12 @@ export async function addApplicationAction(formData: FormData) {
     status: formData.get("status") || undefined,
   });
 
-  createApplication(input);
+  await createApplication(input);
   revalidatePath("/board");
 }
 
 export async function editApplicationAction(formData: FormData) {
+  await requireSession();
   assertWritable();
 
   const input = updateApplicationSchema.parse({
@@ -42,24 +45,26 @@ export async function editApplicationAction(formData: FormData) {
     status: formData.get("status") || undefined,
   });
 
-  updateApplication(input);
+  await updateApplication(input);
   revalidatePath("/board");
 }
 
 export async function moveApplicationAction(id: number, status: string) {
+  await requireSession();
   assertWritable();
 
   const input = moveApplicationSchema.parse({ id, status });
 
-  moveApplicationStatus(input.id, input.status);
+  await moveApplicationStatus(input.id, input.status);
   revalidatePath("/board");
 }
 
 export async function deleteApplicationAction(formData: FormData) {
+  await requireSession();
   assertWritable();
 
   const input = deleteApplicationSchema.parse({ id: formData.get("id") });
 
-  deleteApplication(input.id);
+  await deleteApplication(input.id);
   revalidatePath("/board");
 }

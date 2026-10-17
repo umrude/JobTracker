@@ -1,6 +1,7 @@
 import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
+import { getMode } from "@/server/mode";
 import { applications, jobs } from "@/server/db/schema";
 import type {
   CreateApplicationInput,
@@ -8,8 +9,8 @@ import type {
 } from "@/lib/schemas/application";
 import { canTransition, type Status } from "@/lib/schemas/status";
 
-export function listApplicationsWithJob() {
-  const db = getDb();
+export async function listApplicationsWithJob() {
+  const db = getDb(await getMode());
   // Relational queries return a thenable query builder, not resolved rows;
   // .sync() is the terminal call for the fully-synchronous better-sqlite3
   // driver (the async form is `await` instead).
@@ -21,12 +22,12 @@ export function listApplicationsWithJob() {
     .sync();
 }
 
-export type ApplicationWithJob = ReturnType<
-  typeof listApplicationsWithJob
+export type ApplicationWithJob = Awaited<
+  ReturnType<typeof listApplicationsWithJob>
 >[number];
 
-export function createApplication(input: CreateApplicationInput) {
-  const db = getDb();
+export async function createApplication(input: CreateApplicationInput) {
+  const db = getDb(await getMode());
   return db.transaction((tx) => {
     const job = tx
       .insert(jobs)
@@ -50,8 +51,8 @@ export function createApplication(input: CreateApplicationInput) {
   });
 }
 
-export function updateApplication(input: UpdateApplicationInput) {
-  const db = getDb();
+export async function updateApplication(input: UpdateApplicationInput) {
+  const db = getDb(await getMode());
   return db.transaction((tx) => {
     const existing = tx.query.applications
       .findFirst({ where: eq(applications.id, input.id) })
@@ -86,8 +87,8 @@ export function updateApplication(input: UpdateApplicationInput) {
 // Stamps appliedAt the first time a card lands on "applied", since that's
 // the moment the fact actually happened; leaves it alone on every other
 // move so dragging a card back and forth doesn't overwrite real history.
-export function moveApplicationStatus(id: number, status: Status) {
-  const db = getDb();
+export async function moveApplicationStatus(id: number, status: Status) {
+  const db = getDb(await getMode());
   return db.transaction((tx) => {
     const existing = tx.query.applications
       .findFirst({ where: eq(applications.id, id) })
@@ -117,8 +118,8 @@ export function moveApplicationStatus(id: number, status: Status) {
 
 // Deletes the job row too once it has no applications left, so removing a
 // card doesn't leave an orphaned job behind.
-export function deleteApplication(id: number) {
-  const db = getDb();
+export async function deleteApplication(id: number) {
+  const db = getDb(await getMode());
   db.transaction((tx) => {
     const existing = tx.query.applications
       .findFirst({ where: eq(applications.id, id) })
