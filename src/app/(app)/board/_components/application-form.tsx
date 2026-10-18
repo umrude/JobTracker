@@ -28,7 +28,7 @@ import {
   deleteApplicationAction,
   editApplicationAction,
 } from "../actions";
-import { MaybeDisabledTooltip } from "./demo-tooltip";
+import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 
 type ApplicationFormProps =
   | { mode: "add"; disabled: boolean; trigger: ReactElement }

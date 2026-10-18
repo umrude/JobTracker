@@ -40,25 +40,127 @@ type SeedApplication = SeedJob & {
   appliedDaysAgo?: number;
 };
 
-// Jobs with no application: these appear on the Saved jobs page.
-const SEED_SAVED_JOBS: SeedJob[] = [
+// Jobs with no application: these appear on the Saved jobs page. Their
+// URLs are also the keys for the canned demo comparison results, so keep
+// them stable. The listings fit the seeded resume to varying degrees
+// (strong, partial, weak) so the demo shows a spread of scores.
+export const SEED_SAVED_JOBS: SeedJob[] = [
   {
     company: "Northwind Robotics",
     title: "Senior Frontend Engineer",
     url: "https://careers.northwindrobotics.example/jobs/1821",
-    listingText:
-      "Build the operator console for warehouse robots using React and TypeScript.",
+    listingText: `Northwind Robotics builds autonomous picking robots for mid-size warehouses. Our operator console is how floor managers see, steer, and troubleshoot a fleet of 50+ robots in real time.
+
+What you'll do
+- Own the architecture of the operator console, a React + TypeScript app that renders live robot telemetry.
+- Build real-time views fed by WebSockets: fleet maps, task queues, fault alerts.
+- Design data visualizations for throughput and error rates (D3 or similar).
+- Raise the quality bar: component tests, Playwright end-to-end tests, and accessibility reviews.
+- Mentor two mid-level engineers and partner closely with our robotics and design teams.
+
+What we're looking for
+- 5+ years building production web apps, 2+ with TypeScript.
+- Deep React experience, including performance work on data-heavy UIs.
+- Experience with real-time data (WebSockets, server-sent events).
+- Comfort with automated testing and CI.
+- Nice to have: D3, canvas/WebGL rendering, experience in logistics or industrial software.`,
     source: "LinkedIn",
     savedDaysAgo: 6,
+    notes: "Recruiter reached out. Hybrid, 2 days/week in office.",
+  },
+  {
+    company: "Tidewater Labs",
+    title: "Full-Stack Engineer",
+    url: "https://tidewaterlabs.example/careers/fse-112",
+    listingText: `Tidewater Labs makes scheduling software for independent veterinary clinics. We're a 25-person team, fully remote in US time zones.
+
+The role
+You'll ship features end to end across our Next.js frontend and Node.js API, from database migration to UI polish.
+
+Responsibilities
+- Build product features in Next.js (App Router) and TypeScript.
+- Design PostgreSQL schemas and write efficient queries.
+- Maintain our tRPC API layer and background job workers.
+- Deploy and monitor services on AWS (ECS, RDS, S3).
+- Talk to customers: every engineer joins a support rotation one week per quarter.
+
+Requirements
+- 3+ years of full-stack web development.
+- Strong TypeScript and React.
+- Production experience with PostgreSQL.
+- Familiarity with AWS or a similar cloud platform.
+- Nice to have: tRPC, Stripe integrations, experience at an early-stage startup.`,
+    source: "Company site",
+    savedDaysAgo: 4,
+  },
+  {
+    company: "Bramblewood Learning",
+    title: "Software Engineer, Accessibility",
+    url: "https://bramblewoodlearning.example/jobs/a11y-07",
+    listingText: `Bramblewood Learning builds reading software used by 2 million K-8 students, including many who rely on screen readers, switch devices, and magnification.
+
+About the role
+Join our Accessibility team to make every part of the student experience usable by every student.
+
+You will
+- Audit and fix our React component library against WCAG 2.2 AA.
+- Build accessible patterns for complex widgets: drag-and-drop activities, audio players, rich text.
+- Write automated accessibility tests (axe-core, Playwright) and run manual audits with NVDA, JAWS, and VoiceOver.
+- Teach other teams: write guidelines, review pull requests, run workshops.
+
+You have
+- 2+ years of frontend engineering with React.
+- Hands-on knowledge of ARIA, keyboard interaction patterns, and focus management.
+- Experience testing with at least one screen reader.
+- Clear writing; you'll document a lot of patterns.
+- Nice to have: IAAP certification (CPACC or WAS), experience in education technology.`,
+    source: "Referral",
+    savedDaysAgo: 3,
+    notes: "Referred by a former teammate. Ask about the switch-device testing lab.",
+  },
+  {
+    company: "Granite & Gale",
+    title: "Backend Engineer, Data Platform",
+    url: "https://graniteandgale.example/careers/be-data-3",
+    listingText: `Granite & Gale provides weather-risk analytics to insurers and utilities. Our data platform ingests 4 TB of sensor and forecast data per day.
+
+What you'll work on
+- Build and operate high-throughput ingestion services in Go.
+- Design event pipelines on Kafka and stream processing with Flink.
+- Model time-series data in PostgreSQL/TimescaleDB and ClickHouse.
+- Run services on Kubernetes with Terraform-managed infrastructure.
+- Own on-call for the services your team builds.
+
+What you bring
+- 4+ years of backend engineering, ideally in Go, Rust, or Java.
+- Experience with distributed systems and message queues (Kafka, Pulsar, or similar).
+- Strong SQL and data modeling skills.
+- Kubernetes and infrastructure-as-code experience.
+- Nice to have: geospatial data, scientific computing, Python.`,
+    source: "Indeed",
+    savedDaysAgo: 2,
   },
   {
     company: "Pebblebrook Health",
     title: "Product Designer",
     url: "https://pebblebrookhealth.example/careers/4410",
-    listingText:
-      "Design patient-facing scheduling flows for a telehealth platform.",
+    listingText: `Pebblebrook Health is a telehealth platform for primary care. We're hiring a Product Designer to own patient-facing scheduling and intake flows.
+
+You will
+- Lead design for booking, rescheduling, and pre-visit intake across web and mobile.
+- Run user research with patients, including older adults and people with low digital literacy.
+- Produce wireframes, high-fidelity mockups, and interactive prototypes in Figma.
+- Contribute to and maintain our design system.
+- Partner with engineers through implementation and QA.
+
+You have
+- 4+ years of product design experience with a portfolio of shipped work.
+- Strong interaction design and visual design skills.
+- Experience planning and running usability studies.
+- Expert Figma skills, including components and auto layout.
+- Nice to have: healthcare experience, familiarity with HIPAA constraints, front-end coding skills.`,
     source: "Company site",
-    savedDaysAgo: 5,
+    savedDaysAgo: 1,
   },
 ];
 

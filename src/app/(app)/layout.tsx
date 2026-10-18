@@ -4,6 +4,7 @@ import { auth, signOut } from "@/server/auth";
 import { env } from "@/server/env";
 import { Button } from "@/components/ui/button";
 import { toggleDemoModeAction } from "./mode-actions";
+import { NavLinks } from "./nav-links";
 
 // Not an auth gate on its own: per Next.js's auth guidance, a layout's
 // check doesn't re-run on client-side navigation between sibling routes.
@@ -23,7 +24,10 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex items-center justify-between border-b px-6 py-3">
-        <span className="font-semibold">Job Tracker</span>
+        <div className="flex items-center gap-6">
+          <span className="font-semibold">Job Tracker</span>
+          <NavLinks />
+        </div>
         <div className="flex items-center gap-4">
           {!env.DEMO_MODE && (
             <form action={toggleDemoModeAction}>
