@@ -40,6 +40,59 @@ type SeedApplication = SeedJob & {
   appliedDaysAgo?: number;
 };
 
+// A fake resume for a fictional person; never put real resume text here.
+// It's a frontend engineer on purpose: a strong fit for Northwind, a
+// partial fit for Tidewater (no AWS, light Postgres) and Bramblewood
+// (ARIA and axe, but no screen-reader testing), and a weak fit for the
+// backend and design roles.
+export const SEED_RESUME_V1 = `Alex Rivera
+alex.rivera@example.com · Portland, OR
+
+Frontend Engineer with 5 years building React applications.
+
+Experience
+Frontend Engineer, Larkspur Logistics (2022-present)
+- Built a shipment tracking dashboard in React and TypeScript.
+- Added Playwright end-to-end tests to CI.
+
+Frontend Developer, Copperline Media (2020-2022)
+- Built marketing sites and a CMS-driven article template in React.
+
+Skills
+React, TypeScript, JavaScript, CSS, Playwright, Git`;
+
+export const SEED_RESUME_V2 = `Alex Rivera
+alex.rivera@example.com · Portland, OR · github.com/alex-rivera-example
+
+Summary
+Frontend engineer with 6 years of experience building data-heavy React and TypeScript applications. I care about performance, testing, and interfaces that work for everyone.
+
+Experience
+Senior Frontend Engineer, Larkspur Logistics (2022-present)
+- Led the rebuild of a real-time shipment tracking dashboard (React, TypeScript, WebSockets) used by 400+ dispatchers; cut time-to-interactive from 6s to 1.8s with virtualization and memoization.
+- Built fleet throughput charts with D3 and visx.
+- Introduced Playwright end-to-end tests and component tests in CI (GitHub Actions); flaky-test rate dropped below 1%.
+- Mentored two junior engineers through code review and pairing.
+- Ran keyboard-navigation and ARIA fixes across the dashboard; added axe checks to CI.
+
+Frontend Developer, Copperline Media (2020-2022)
+- Built a Next.js publishing front end serving 2M monthly readers.
+- Wrote Node.js API routes and simple PostgreSQL queries for the editorial tools.
+- Built a shared React component library with Storybook.
+
+Junior Web Developer, Fennel & Finch Agency (2019-2020)
+- Built responsive marketing sites with HTML, CSS, and JavaScript.
+
+Skills
+Languages: TypeScript, JavaScript, HTML, CSS, some SQL
+Frontend: React, Next.js, D3, visx, Tailwind CSS, Storybook
+Real-time: WebSockets, server-sent events
+Testing: Playwright, Vitest, React Testing Library, axe-core
+Tools: Git, GitHub Actions, Vercel, Figma (handoff only)
+
+Education
+B.S. Computer Science, Willamette Valley State University (2019)`;
+
 // Jobs with no application: these appear on the Saved jobs page. Their
 // URLs are also the keys for the canned demo comparison results, so keep
 // them stable. The listings fit the seeded resume to varying degrees
@@ -293,6 +346,14 @@ export function seedDemoDatabase(): number {
   const db = drizzle(sqlite, { schema });
 
   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+  // Two versions so the demo shows the version history; v2 is active.
+  db.insert(schema.resumes)
+    .values([
+      { text: SEED_RESUME_V1, version: 1, isActive: false, createdAt: daysAgo(120) },
+      { text: SEED_RESUME_V2, version: 2, isActive: true, createdAt: daysAgo(14) },
+    ])
+    .run();
 
   for (const seedJob of SEED_SAVED_JOBS) {
     db.insert(schema.jobs)

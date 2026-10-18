@@ -23,7 +23,7 @@ A single-user web app for tracking job applications. Portfolio project, so code 
 ```
 src/
   app/
-    (app)/              board, saved, compare, cover-letters, inbox-review
+    (dashboard)/        board, saved, compare, cover-letters, inbox-review
     api/sync/           Gmail sync route handler
   server/               server-only code; every file imports "server-only"
     db/                 Drizzle schema, client factory, seed
