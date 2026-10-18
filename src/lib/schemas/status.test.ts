@@ -3,8 +3,8 @@ import { canTransition, STATUSES, statusSchema } from "@/lib/schemas/status";
 
 describe("canTransition", () => {
   it("allows moving between any two different statuses", () => {
-    expect(canTransition("saved", "applied")).toBe(true);
-    expect(canTransition("offer", "saved")).toBe(true);
+    expect(canTransition("applied", "interviewing")).toBe(true);
+    expect(canTransition("offer", "applied")).toBe(true);
     expect(canTransition("ghosted", "interviewing")).toBe(true);
   });
 
@@ -24,5 +24,9 @@ describe("statusSchema", () => {
 
   it("rejects an unknown status", () => {
     expect(() => statusSchema.parse("withdrawn")).toThrow();
+  });
+
+  it("rejects saved, which is a job with no application, not a status", () => {
+    expect(() => statusSchema.parse("saved")).toThrow();
   });
 });

@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import path from "node:path";
 
 export default defineConfig({
@@ -15,5 +15,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Claude Code worktrees under .claude/ hold full copies of the repo,
+    // tests included; don't run those duplicates.
+    exclude: [...configDefaults.exclude, ".claude/**"],
   },
 });

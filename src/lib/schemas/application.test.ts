@@ -6,7 +6,7 @@ import {
 } from "@/lib/schemas/application";
 
 describe("createApplicationSchema", () => {
-  it("defaults status to saved and treats blank optional fields as absent", () => {
+  it("defaults status to applied and treats blank optional fields as absent", () => {
     const result = createApplicationSchema.parse({
       company: "Acme",
       title: "Engineer",
@@ -18,7 +18,7 @@ describe("createApplicationSchema", () => {
       title: "Engineer",
       url: undefined,
       notes: undefined,
-      status: "saved",
+      status: "applied",
     });
   });
 

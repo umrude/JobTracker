@@ -2,8 +2,13 @@ import { z } from "zod";
 
 // Single source of truth for application status, shared by the DB schema,
 // Server Action validation, and the kanban board UI.
+//
+// There's deliberately no "saved" status: a job you haven't applied to yet
+// is a `jobs` row with no application (see the Saved jobs page). An
+// application row exists only once you've applied, so "saved" is defined
+// by the shape of the data instead of a status value that could drift out
+// of sync with appliedAt.
 export const STATUSES = [
-  "saved",
   "applied",
   "acknowledged",
   "interviewing",
@@ -17,7 +22,6 @@ export type Status = (typeof STATUSES)[number];
 export const statusSchema = z.enum(STATUSES);
 
 export const STATUS_LABELS: Record<Status, string> = {
-  saved: "Saved",
   applied: "Applied",
   acknowledged: "Acknowledged",
   interviewing: "Interviewing",

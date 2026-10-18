@@ -25,21 +25,23 @@ function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
-type SeedApplication = {
+type SeedJob = {
   company: string;
   title: string;
   url: string;
   listingText: string;
   source: string;
   savedDaysAgo: number;
-  status: Status;
-  appliedDaysAgo?: number;
   notes?: string;
 };
 
-// Fictional companies and .example URLs (RFC 2606 reserved, never resolve)
-// spread across all seven statuses so every kanban column has cards.
-const SEED_APPLICATIONS: SeedApplication[] = [
+type SeedApplication = SeedJob & {
+  status: Status;
+  appliedDaysAgo?: number;
+};
+
+// Jobs with no application: these appear on the Saved jobs page.
+const SEED_SAVED_JOBS: SeedJob[] = [
   {
     company: "Northwind Robotics",
     title: "Senior Frontend Engineer",
@@ -48,7 +50,6 @@ const SEED_APPLICATIONS: SeedApplication[] = [
       "Build the operator console for warehouse robots using React and TypeScript.",
     source: "LinkedIn",
     savedDaysAgo: 6,
-    status: "saved",
   },
   {
     company: "Pebblebrook Health",
@@ -58,8 +59,12 @@ const SEED_APPLICATIONS: SeedApplication[] = [
       "Design patient-facing scheduling flows for a telehealth platform.",
     source: "Company site",
     savedDaysAgo: 5,
-    status: "saved",
   },
+];
+
+// Fictional companies and .example URLs (RFC 2606 reserved, never resolve)
+// spread across every status so every kanban column has cards.
+const SEED_APPLICATIONS: SeedApplication[] = [
   {
     company: "Cobalt Harbor",
     title: "Backend Engineer (Node.js)",
@@ -187,6 +192,20 @@ export function seedDemoDatabase(): number {
 
   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
+  for (const seedJob of SEED_SAVED_JOBS) {
+    db.insert(schema.jobs)
+      .values({
+        company: seedJob.company,
+        title: seedJob.title,
+        url: seedJob.url,
+        listingText: seedJob.listingText,
+        source: seedJob.source,
+        notes: seedJob.notes,
+        savedAt: daysAgo(seedJob.savedDaysAgo),
+      })
+      .run();
+  }
+
   for (const seedApp of SEED_APPLICATIONS) {
     const job = db
       .insert(schema.jobs)
@@ -214,7 +233,7 @@ export function seedDemoDatabase(): number {
   }
 
   sqlite.close();
-  return SEED_APPLICATIONS.length;
+  return SEED_SAVED_JOBS.length + SEED_APPLICATIONS.length;
 }
 
 // CLI entry point (`pnpm db:seed`). Guarded so importing seedDemoDatabase()
@@ -226,5 +245,5 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const count = seedDemoDatabase();
-  console.log(`Seeded ${count} applications into ${DEMO_DB_PATH}`);
+  console.log(`Seeded ${count} jobs into ${DEMO_DB_PATH}`);
 }

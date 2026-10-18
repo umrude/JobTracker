@@ -126,7 +126,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
             <Select
               name="status"
               items={STATUS_LABELS}
-              defaultValue={application?.status ?? "saved"}
+              defaultValue={application?.status ?? "applied"}
             >
               <SelectTrigger id="status" className="w-full">
                 <SelectValue />
