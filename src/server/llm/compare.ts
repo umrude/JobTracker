@@ -1,7 +1,12 @@
 import "server-only";
+import { z } from "zod";
 import type { LlmClient, StructuredRequest } from "@/server/llm/client";
-import { comparisonOutputSchema, type Comparison } from "@/lib/schemas/comparison";
-import type { LlmResult } from "@/lib/llm-result";
+import {
+  comparisonOutputSchema,
+  comparisonSchema,
+  type Comparison,
+} from "@/lib/schemas/comparison";
+import { llmError, type LlmResult } from "@/lib/llm-result";
 
 // Comparison output is a few hundred tokens of JSON. This leaves plenty of
 // headroom (adaptive thinking also counts against it) while staying under
@@ -36,31 +41,58 @@ export function buildCompareRequest(
 
 export type CompareResult = LlmResult<{ comparison: Comparison; model: string }>;
 
-// TODO(you): implement this. The agreed contract:
-//
-// - Call client.generateStructured(buildCompareRequest(listing, resume)).
-//   It never throws. API failures come back as { ok: false } with kind
-//   "api_error", already retried by the SDK.
-// - Check response.stopReason before parsing:
-//     "refusal"    -> kind "refusal"
-//     "max_tokens" -> kind "truncated" (the JSON is cut off mid-object)
-// - Parse response.text as JSON, then validate with comparisonSchema
-//   (safeParse). Either can fail.
-// - Malformed output (bad JSON or schema violation): retry once. If the
-//   retry is also malformed, return kind "malformed_output".
-// - Decide whether refusal/truncated/api_error are retried. The tests in
-//   compare.test.ts assume they aren't, with reasons noted there; change
-//   the tests if you disagree.
-// - On success, return { comparison, model: response.model }.
-// - Use llmError() from lib/llm-result.ts to build error results. Never let
-//   a raw JSON.parse or Zod error escape to the caller.
-//
-// When it's implemented, remove the .skip in compare.test.ts.
+// The first try plus one retry, for malformed output only.
+const MAX_ATTEMPTS = 2;
+
+export type ParsedComparison =
+  | { ok: true; comparison: Comparison }
+  | { ok: false; reason: string };
+
+// JSON text -> validated Comparison. Never throws: a failure comes back as
+// a reason string, which is logged on the server and never shown to the user.
+export function parseComparison(text: string): ParsedComparison {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  const result = comparisonSchema.safeParse(json);
+  if (!result.success) {
+    return { ok: false, reason: `schema violation: ${z.prettifyError(result.error)}` };
+  }
+  return { ok: true, comparison: result.data };
+}
+
+// Calls the model and validates its output. Only malformed output is
+// retried. Refusals and truncation would very likely happen again on an
+// identical request. API errors were already retried by the SDK.
 export async function compareResume(
   listing: string,
   resume: string,
   client: LlmClient,
 ): Promise<CompareResult> {
-  void [listing, resume, client];
-  throw new Error("compareResume is not implemented yet (TODO(you))");
+  const request = buildCompareRequest(listing, resume);
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const response = await client.generateStructured(request);
+    if (!response.ok) return response;
+
+    const { stopReason, text, model } = response.data;
+    if (stopReason === "refusal") return llmError("refusal");
+    if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
+      return llmError("truncated");
+    }
+
+    const parsed = parseComparison(text);
+    if (parsed.ok) return { ok: true, data: { comparison: parsed.comparison, model } };
+
+    console.warn(`Comparison attempt ${attempt}/${MAX_ATTEMPTS} malformed: ${parsed.reason}`);
+  }
+
+  return llmError("malformed_output");
 }

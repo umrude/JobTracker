@@ -1,51 +1,74 @@
 import { z } from "zod";
+import {
+  clampScore,
+  normalizeSkills,
+  withoutSkills,
+} from "@/lib/comparison-helpers";
 
-// TODO(you): this file is yours to write. What's here is only the agreed
-// field names with bare types, so the rest of the code compiles. Replace
-// it with your real schemas.
-//
 // There are two schemas because of one constraint:
 //
 // 1. comparisonOutputSchema is sent to the model as a JSON Schema
 //    (structured outputs, via zodOutputFormat in server/llm/client.ts).
-//    It can NOT contain .transform() or .pipe() into a transform: Zod
-//    can't express those as JSON Schema and zodOutputFormat throws.
-//    Number/length bounds (.min/.max/.int) are allowed, but the API doesn't
-//    enforce them. The SDK moves them into the field description as a hint,
-//    and only your Zod validation actually checks them. .describe() text
-//    is sent to the model too, so it's a good place for per-field guidance.
+//    It can't contain .transform(): Zod can't express transforms as JSON
+//    Schema and zodOutputFormat throws. Bounds like .min()/.max() would be
+//    allowed but not enforced by the API, so the guidance lives in
+//    .describe() text instead, which the model does see.
 //
-// 2. comparisonSchema is what you validate the model's JSON with, what
-//    gets stored, and what stored rows are re-validated with on every read
-//    (see the comparisons.result column). It can add transforms on top of
-//    the output schema, e.g. comparisonOutputSchema.transform(...). The
-//    helpers in lib/comparison-helpers.ts are there for this.
-//    Careful: stored rows are parsed with it again on read, so any
-//    transform needs to give the same result when run on its own output.
+// 2. comparisonSchema validates the model's JSON, is what gets stored, and
+//    re-validates stored rows on every read. It adds cleanup transforms on
+//    top of the output schema.
 //
-// Things to decide:
-// - score: integer 0-100? Reject out-of-range values (forcing a retry), or
-//   accept and clamp with clampScore()? Which is better UX?
-// - Skill/keyword arrays: trim and dedupe? Cap the length? Reject empty
-//   strings?
-// - suggestions: plain strings, or objects (e.g. { section, change, why })
-//   so the UI can group them? If you change the shape, update the demo
-//   fixtures in server/llm/compare-demo.ts too (a test checks they parse).
-// - Should missingSkills and matchedSkills be allowed to overlap?
+// Policy: wrong types or missing fields fail validation, and compareResume
+// retries. Merely imperfect values (a score of 104, a duplicate skill, an
+// overlong list) are cleaned up instead of rejected: the result is still
+// useful, and a retry costs another API call.
+
+const MAX_SKILLS = 30;
+const MAX_SUGGESTIONS = 10;
 
 export const comparisonOutputSchema = z.object({
-  score: z.number(),
-  matchedSkills: z.array(z.string()),
-  missingSkills: z.array(z.string()),
-  missingKeywords: z.array(z.string()),
-  suggestions: z.array(z.string()),
+  score: z
+    .number()
+    .describe("Overall fit as an integer from 0 to 100, per the scoring guide."),
+  matchedSkills: z
+    .array(z.string())
+    .describe("Skills and qualifications from the listing that the resume clearly shows."),
+  missingSkills: z
+    .array(z.string())
+    .describe("Skills and qualifications from the listing the resume doesn't show, required ones first."),
+  missingKeywords: z
+    .array(z.string())
+    .describe("Specific terms from the listing that don't appear in the resume."),
+  suggestions: z
+    .array(z.string())
+    .describe("Concrete, honest edits to the resume for this listing. At most 10."),
 });
 
-export const comparisonSchema = comparisonOutputSchema;
+function cleanSuggestions(suggestions: readonly string[]): string[] {
+  const trimmed = suggestions.map((s) => s.trim()).filter((s) => s !== "");
+  return [...new Set(trimmed)].slice(0, MAX_SUGGESTIONS);
+}
+
+// Every step here gives the same result when run on its own output
+// (clamping a clamped score, deduping a deduped list), so re-validating a
+// stored row on read returns it unchanged.
+export const comparisonSchema = comparisonOutputSchema.transform((raw) => {
+  const matchedSkills = normalizeSkills(raw.matchedSkills).slice(0, MAX_SKILLS);
+  return {
+    score: clampScore(raw.score),
+    matchedSkills,
+    // A skill listed as both matched and missing counts as matched.
+    missingSkills: withoutSkills(normalizeSkills(raw.missingSkills), matchedSkills).slice(
+      0,
+      MAX_SKILLS,
+    ),
+    missingKeywords: normalizeSkills(raw.missingKeywords).slice(0, MAX_SKILLS),
+    suggestions: cleanSuggestions(raw.suggestions),
+  };
+});
 
 // The validated shape the app works with.
 export type Comparison = z.infer<typeof comparisonSchema>;
 
 // What the model (or a fixture) produces before comparisonSchema runs.
-// Same as Comparison until you add transforms.
 export type ComparisonInput = z.input<typeof comparisonSchema>;

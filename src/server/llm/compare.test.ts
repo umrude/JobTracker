@@ -4,7 +4,11 @@ import type {
   StructuredRequest,
   StructuredResponse,
 } from "@/server/llm/client";
-import { buildCompareRequest, compareResume } from "@/server/llm/compare";
+import {
+  buildCompareRequest,
+  compareResume,
+  parseComparison,
+} from "@/server/llm/compare";
 import { llmError, type LlmResult } from "@/lib/llm-result";
 
 // A fake LlmClient that replays queued responses in order and records the
@@ -45,8 +49,31 @@ describe("buildCompareRequest", () => {
   });
 });
 
-// TODO(you): remove .skip once compareResume is implemented.
-describe.skip("compareResume", () => {
+describe("parseComparison", () => {
+  it("parses and validates good JSON", () => {
+    expect(parseComparison(JSON.stringify(VALID))).toMatchObject({
+      ok: true,
+      comparison: { score: 78 },
+    });
+  });
+
+  it("reports invalid JSON as a reason, without throwing", () => {
+    const result = parseComparison("{not json");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/^invalid JSON/);
+  });
+
+  it("reports a schema violation with the failing field", () => {
+    const result = parseComparison(JSON.stringify({ ...VALID, score: "high" }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/^schema violation/);
+    expect(result.reason).toContain("score");
+  });
+});
+
+describe("compareResume", () => {
   it("returns the validated comparison and the model that produced it", async () => {
     const { client, requests } = fakeClient([reply(JSON.stringify(VALID))]);
     const result = await compareResume("listing", "resume", client);
@@ -124,6 +151,23 @@ describe.skip("compareResume", () => {
 
     expect(result).toMatchObject({ ok: false, error: { kind: "truncated" } });
     expect(requests).toHaveLength(1);
+  });
+
+  // An imperfect-but-usable value is cleaned up by comparisonSchema rather
+  // than rejected, so it doesn't cost a second API call.
+  it("clamps an out-of-range score without retrying", async () => {
+    const { client, requests } = fakeClient([reply(JSON.stringify({ ...VALID, score: 104 }))]);
+    const result = await compareResume("listing", "resume", client);
+
+    expect(result).toMatchObject({ ok: true, data: { comparison: { score: 100 } } });
+    expect(requests).toHaveLength(1);
+  });
+
+  it("treats running out of context window as truncated", async () => {
+    const { client } = fakeClient([reply('{"sco', "model_context_window_exceeded")]);
+    const result = await compareResume("listing", "resume", client);
+
+    expect(result).toMatchObject({ ok: false, error: { kind: "truncated" } });
   });
 
   // Not retried here: the SDK already retried rate limits, 5xx errors, and
