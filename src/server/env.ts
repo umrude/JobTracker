@@ -16,7 +16,15 @@ const envSchema = z.object({
   AUTH_SECRET: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
-  ANTHROPIC_API_KEY: z.string().optional(),
+  // Optional at startup so demo mode and a fresh checkout boot without it.
+  // The LLM client checks for it when a call is actually made and returns
+  // a missing_api_key error the UI can show. An empty "ANTHROPIC_API_KEY="
+  // line in .env counts as unset.
+  ANTHROPIC_API_KEY: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().optional(),
+  ),
+  ANTHROPIC_MODEL: z.string().optional().default("claude-opus-5-5"),
   DATABASE_PATH: z.string().optional().default("./data/app.db"),
 });
 
