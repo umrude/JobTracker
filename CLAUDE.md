@@ -75,6 +75,7 @@ src/
 - **Comparison**: job, resume, result JSON (Zod-validated), createdAt
 - **EmailEvent** (Phase 4): gmail message id, thread id, linked application, classified type, confidence, confirmed flag
 - **CoverLetter** (Phase 3): job, resume used, tone, versions
+- **TailoredResume** (Phase 3): job, resume used, approved edits (Zod-validated), versions. PDFs are rebuilt from LaTeX source + edits, not stored
 ## Commands
  
 ```
@@ -96,11 +97,11 @@ Before saying a task is done, run `pnpm typecheck && pnpm lint && pnpm test` and
 Work on one phase at a time. Do not start a later phase unless I ask.
  
 1. **(Done) Foundation + manual kanban**: scaffold, Drizzle schema, seed data, `getMode()`/`assertWritable()`, auth, kanban with manual add/move/edit.
-2. **Saved jobs + resume comparison**: save listings, upload/parse resume, LLM comparison with Zod-validated output.
-3. **Cover letters**: generation with tone/length options, versions per job.
+2. **(Done) Saved jobs + resume comparison**: save listings, upload/parse resume, LLM comparison with Zod-validated output.
+3. **Cover letters + tailored resumes**: a "Prepare application" action on a comparison. First a tailored resume: the LLM proposes structured edits (rewrite the summary, reorder/select skills and bullets, reword using the listing's terms) that only emphasize what's already in the resume, never invent experience, and are reviewed before use. If a LaTeX source is provided (stored as text, like the parsed resume), apply approved edits and compile to PDF in a sandbox (no shell escape, model text escaped, never raw LaTeX from the model); without one, output tailored text. Then a cover letter from the listing + tailored resume, with tone/length options. Versions per job. Open question: hosting, since PDF compilation needs a TeX engine.
 4. **Gmail sync**: OAuth, incremental sync, pre-filter, classifier, review inbox, classifier eval set.
 5. **Polish**: README with architecture diagram and decision log, screenshots/GIF from demo mode, CI (GitHub Actions), hosted read-only demo.
-**Current phase: 2** (Phase 1 complete: foundation, demo mode, auth, manual kanban)
+**Current phase: 3, not started** (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page)
  
 ## Working style
  
