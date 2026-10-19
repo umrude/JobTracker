@@ -5,6 +5,7 @@ import { assertWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
 import { parseResumeFile } from "@/server/resume/parse";
 import { activateResume, createResumeVersion } from "@/server/db/resumes";
+import { importProfileFromLatex } from "@/server/db/profile";
 import { activateResumeSchema, saveResumeSchema } from "@/lib/schemas/resume";
 import { RESUME_FILE_ERRORS, type ParseResumeState } from "@/lib/resume-file";
 import { validationError, type FormState } from "@/lib/form-state";
@@ -61,6 +62,16 @@ export async function saveResumeAction(
   }
 
   await createResumeVersion(parsed.data.text, latex.source);
+
+  // Add anything new from the .tex to the profile (it only ever adds).
+  // Best-effort: a template the parser doesn't understand still saves as a
+  // resume version; it just can't feed the profile or be tailored.
+  if (latex.source) {
+    const imported = await importProfileFromLatex(latex.source);
+    if (!imported.ok) console.warn(`Profile import skipped: ${imported.message}`);
+    revalidatePath("/profile");
+  }
+
   revalidatePath("/resume");
   return { status: "success" };
 }

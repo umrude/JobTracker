@@ -12,6 +12,11 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { STATUSES } from "@/lib/schemas/status";
+import {
+  EXPERIENCE_KINDS,
+  PROFICIENCY_LEVELS,
+  PROFILE_SOURCES,
+} from "@/lib/schemas/profile";
 
 // A job with no application row is a saved job: one you're considering
 // but haven't applied to yet.
@@ -97,6 +102,106 @@ export const comparisons = sqliteTable(
   },
   (table) => [index("comparisons_job_id_idx").on(table.jobId)],
 );
+
+// The profile: everything you've done, a superset of any one resume.
+// Tailoring draws only from it. See docs/tailored-resumes.md, "The profile".
+// There's one profile (single user), so these tables have no owner column.
+
+export const profileSkills = sqliteTable(
+  "profile_skills",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    // skillKey(name): trimmed, lowercased, whitespace collapsed. Unique, so
+    // the same skill can't be added twice under different spacing/case.
+    nameKey: text("name_key").notNull(),
+    category: text("category"),
+    // Other names for this skill ("Postgres" for PostgreSQL), added when
+    // you confirm a comparison gap is the same skill.
+    aliases: text("aliases", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+    proficiency: text("proficiency", { enum: PROFICIENCY_LEVELS }),
+    experience: text("experience", { enum: EXPERIENCE_KINDS }),
+    // Where you used it, in your words. A skill with no note and no bullet
+    // mentioning it can be listed, but not claimed in a summary or bullet.
+    note: text("note"),
+    source: text("source", { enum: PROFILE_SOURCES }).notNull(),
+    // The job whose comparison prompted it, for source = "gap".
+    sourceJobId: integer("source_job_id").references(() => jobs.id, { onDelete: "set null" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [uniqueIndex("profile_skills_name_key_unique").on(table.nameKey)],
+);
+
+// An experience, project, education, or other entry. The four heading
+// fields follow \resumeSubheading's four arguments, whose meaning depends
+// on the section: for a job, title / dates / organization / location; for
+// a project, name / dates / description / tech.
+export const profileEntries = sqliteTable(
+  "profile_entries",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    // The resume section it belongs in, e.g. "Experience".
+    section: text("section").notNull(),
+    title: text("title").notNull(),
+    // Free text, exactly as the template prints it.
+    dates: text("dates").notNull().default(""),
+    subtitle: text("subtitle").notNull().default(""),
+    detail: text("detail").notNull().default(""),
+    // Links the entry to its \resumeSubheading in the .tex (see
+    // entryLatexKey). Set at import and kept on rename, so the link holds.
+    // Null for entries you added that aren't in the .tex.
+    latexKey: text("latex_key"),
+    source: text("source", { enum: PROFILE_SOURCES }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [uniqueIndex("profile_entries_latex_key_unique").on(table.latexKey)],
+);
+
+export const profileBullets = sqliteTable(
+  "profile_bullets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    entryId: integer("entry_id")
+      .notNull()
+      .references(() => profileEntries.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    source: text("source", { enum: PROFILE_SOURCES }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [index("profile_bullets_entry_id_idx").on(table.entryId)],
+);
+
+// Short facts the tailored summary and cover letter may draw on.
+export const profileHighlights = sqliteTable("profile_highlights", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  text: text("text").notNull(),
+  source: text("source", { enum: PROFILE_SOURCES }).notNull(),
+  sourceJobId: integer("source_job_id").references(() => jobs.id, { onDelete: "set null" }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export const profileEntriesRelations = relations(profileEntries, ({ many }) => ({
+  bullets: many(profileBullets),
+}));
+
+export const profileBulletsRelations = relations(profileBullets, ({ one }) => ({
+  entry: one(profileEntries, {
+    fields: [profileBullets.entryId],
+    references: [profileEntries.id],
+  }),
+}));
 
 export const jobsRelations = relations(jobs, ({ many }) => ({
   applications: many(applications),

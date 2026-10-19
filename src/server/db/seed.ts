@@ -6,12 +6,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "@/server/db/schema";
 import { DEMO_DB_PATH } from "@/server/db/paths";
 import type { Status } from "@/lib/schemas/status";
 import { DEMO_MODEL, getDemoComparison } from "@/server/llm/compare-demo";
+import { importProfileFromLatexInto, type ProfileDb } from "@/server/db/profile-store";
+import { skillKey } from "@/lib/comparison-helpers";
+import type { Experience, Proficiency } from "@/lib/schemas/profile";
 
 const UNCOMPARED_SEED_JOB_URL = "https://pebblebrookhealth.example/careers/4410";
 
@@ -360,6 +364,122 @@ const SEED_APPLICATIONS: SeedApplication[] = [
   },
 ];
 
+// Alex's profile: imported from the demo .tex with the same code the app
+// uses, plus extras that aren't on the resume, so tailoring has something
+// to pull in and the Profile page shows "extra" items. Fictional, like the
+// rest of the demo data.
+function seedProfile(db: ProfileDb, latexSource: string | null) {
+  if (!latexSource) return;
+  const imported = importProfileFromLatexInto(db, latexSource);
+  if (!imported.ok) throw new Error(`Demo profile import failed: ${imported.message}`);
+
+  // Levels you'd set on the Profile page. Imported skills start unset.
+  const levels: [string, Proficiency, Experience][] = [
+    ["TypeScript", "expert", "professional"],
+    ["React", "expert", "professional"],
+    ["Playwright", "proficient", "professional"],
+    ["D3", "proficient", "professional"],
+    ["some SQL", "familiar", "professional"],
+  ];
+  for (const [name, proficiency, experience] of levels) {
+    db.update(schema.profileSkills)
+      .set({ proficiency, experience })
+      .where(eq(schema.profileSkills.nameKey, skillKey(name)))
+      .run();
+  }
+
+  // Skills that didn't fit, or that Alex is still learning.
+  db.insert(schema.profileSkills)
+    .values([
+      {
+        name: "Python",
+        nameKey: skillKey("Python"),
+        category: "Languages",
+        proficiency: "familiar",
+        experience: "coursework",
+        note: "University coursework and small data-cleaning scripts.",
+        source: "added",
+        sortOrder: 100,
+      },
+      {
+        name: "Leaflet",
+        nameKey: skillKey("Leaflet"),
+        category: "Frontend",
+        proficiency: "proficient",
+        experience: "personal",
+        note: "Used for the trail conditions map volunteer project.",
+        source: "added",
+        sortOrder: 101,
+      },
+      {
+        name: "Docker",
+        nameKey: skillKey("Docker"),
+        category: "Tools",
+        proficiency: "learning",
+        experience: "personal",
+        source: "added",
+        sortOrder: 102,
+      },
+    ])
+    .run();
+
+  // A project that doesn't fit on the one-page resume.
+  const volunteer = db
+    .insert(schema.profileEntries)
+    .values({
+      section: "Notable Projects",
+      title: "Trail Conditions Map (Volunteer)",
+      dates: "2023",
+      subtitle: "Community Hiking Club Site",
+      detail: "Next.js, Leaflet",
+      source: "added",
+      sortOrder: 100,
+    })
+    .returning({ id: schema.profileEntries.id })
+    .get();
+  db.insert(schema.profileBullets)
+    .values([
+      {
+        entryId: volunteer.id,
+        text: "Built a trail conditions map that club volunteers update through a simple admin form",
+        source: "added",
+        sortOrder: 0,
+      },
+      {
+        entryId: volunteer.id,
+        text: "Cut page weight by 60% by lazy-loading the map layers",
+        source: "added",
+        sortOrder: 1,
+      },
+    ])
+    .run();
+
+  // An extra bullet for an entry that is on the resume.
+  const copperline = db
+    .select({ id: schema.profileEntries.id })
+    .from(schema.profileEntries)
+    .where(eq(schema.profileEntries.title, "Frontend Developer"))
+    .get();
+  if (copperline) {
+    db.insert(schema.profileBullets)
+      .values({
+        entryId: copperline.id,
+        text: "Ran a weekly front-end guild for six engineers covering testing and accessibility",
+        source: "added",
+        sortOrder: 100,
+      })
+      .run();
+  }
+
+  db.insert(schema.profileHighlights)
+    .values({
+      text: "Comfortable owning features from design handoff to production.",
+      source: "added",
+      sortOrder: 100,
+    })
+    .run();
+}
+
 // Reusable by both the CLI entry point below and instrumentation.ts (which
 // reseeds on every dev-server restart so the local "writable demo preview"
 // cookie toggle always starts from a clean, known state).
@@ -388,6 +508,8 @@ export function seedDemoDatabase(): number {
     ])
     .returning()
     .all();
+
+  seedProfile(db, activeResume?.latexSource ?? null);
 
   for (const seedJob of SEED_SAVED_JOBS) {
     const job = db

@@ -74,11 +74,17 @@ src/
 - **Job**: company, title, url, listing text, source, savedAt. A job with no linked application is a "saved job".
 - **Application**: job, status, appliedAt, notes
 - **Resume**: parsed text (no original file), optional LaTeX source text, version, isActive, createdAt
-- **Profile** (Phase 3): skills (by category), entries (experience, projects, education) with bullets. A superset of any one resume; each item notes whether it came from the resume or was added by me
+- **Profile** (Phase 3): one per user, not versioned. A superset of any one resume.
+  - Skills: name, category, aliases, optional proficiency (Expert / Proficient / Familiar / Learning) and experience (Professional / Personal projects / Coursework), optional context note
+  - Entries: section, title, organization, dates (free text, as printed), location/tech, sort order, a key linking it to its .tex entry; each with bullets
+  - Highlights: short facts the tailored summary and cover letter may use
+  - Every item records its source: from resume, added by me, or confirmed from a comparison gap (and which job)
+  - The profile owns content; the .tex owns presentation (header, section order, layout). When they differ, the profile wins in tailored output
+- **ComparisonSkill** (Phase 3): comparison, canonical skill name, matched or missing. Normalized rows for counting across listings
 - **Comparison**: job, resume, result JSON (Zod-validated), createdAt
 - **EmailEvent** (Phase 4): gmail message id, thread id, linked application, classified type, confidence, confirmed flag
 - **CoverLetter** (Phase 3): job, resume used, tone, versions
-- **TailoredResume** (Phase 3): job, resume used, approved edits (Zod-validated), versions. PDFs are rebuilt from LaTeX source + edits, not stored
+- **TailoredResume** (Phase 3): job, resume used, approved edits and a snapshot of the profile text used (Zod-validated), versions. PDFs are rebuilt from LaTeX source + edits, not stored. Comparisons can target a tailored resume instead of a resume version
 ## Commands
  
 ```
@@ -101,9 +107,17 @@ Work on one phase at a time. Do not start a later phase unless I ask.
  
 1. **(Done) Foundation + manual kanban**: scaffold, Drizzle schema, seed data, `getMode()`/`assertWritable()`, auth, kanban with manual add/move/edit.
 2. **(Done) Saved jobs + resume comparison**: save listings, upload/parse resume, LLM comparison with Zod-validated output.
-3. **Cover letters + tailored resumes**: a "Prepare application" action on a comparison. A **profile** holds everything I've done (imported from my .tex, plus extra skills, bullets, projects, and schooling that don't fit on one page); tailoring draws only from it. Gaps on the comparison page get an "I have this" button that adds a confirmed skill to the profile. First a tailored resume: the LLM proposes structured edits (rewrite the summary, select/reorder skills and bullets from the profile, light rewording using the listing's terms) that never invent experience, are checked in code (no new skills, no new numbers), stay within one page (warn with suggestions if not), and are reviewed before use. Without a .tex, tailoring is unavailable ("Upload your .tex to enable tailored resumes"). If a LaTeX source is provided (stored as text, like the parsed resume), apply approved edits and compile to PDF in a sandbox (no shell escape, model text escaped, never raw LaTeX from the model); without one, output tailored text. Then a cover letter from the listing + tailored resume, with tone/length options. Versions per job. PDFs compile with Tectonic, which runs on the local live app (see Hosting).
+3. **Cover letters + tailored resumes**: a "Prepare application" action on a comparison. Design and decisions: `docs/tailored-resumes.md`.
+   - **Profile**: everything I've done (imported from my .tex, plus extra skills, bullets, projects, schooling, and highlights that don't fit on one page). Tailoring draws only from it.
+   - **Comparison gaps**: an "I have this" action adds a confirmed skill or highlight to the profile (or marks it as an alias of an existing skill, or as Learning). Comparisons still score the resume as written, and say so.
+   - **Skill names**: a built-in alias list plus my own aliases map names to one canonical skill, for matching across resumes and listings. Exact listing wording still matters for the keyword check. Each comparison stores its matched and missing skills as normalized rows (the data for Phase 5).
+   - **Tailored resume**: the LLM selects, orders, and lightly rewords profile content (summary from highlights, skills, entries, bullets). Checked in code (nothing outside the profile, no new numbers, Learning skills never on the resume, personal-project skills never implied as professional), kept to one page (warn with suggestions if not), and reviewed by me before use. Approved edits are applied to the LaTeX source and compiled with Tectonic in a sandbox (no shell escape, model text escaped, never raw LaTeX from the model). Without a .tex, tailoring is unavailable ("Upload your .tex to enable tailored resumes").
+   - **Tailored comparison**: compare the tailored resume against the same listing and show original vs tailored scores, with a note that the tailored version was written toward the listing.
+   - **Cover letter**: from the listing + tailored resume + highlights, with tone/length options. May mention Learning skills as learning.
+   - Versions per job. Tailored resumes and cover letters keep a snapshot of the text they used.
 4. **Gmail sync**: OAuth, incremental sync, pre-filter, classifier, review inbox, classifier eval set.
-5. **Polish**: README with architecture diagram and decision log, screenshots/GIF from demo mode, CI (GitHub Actions), hosted read-only demo.
+5. **Insights**: a skill-gap recap across comparisons and applications (skills most often missing, whether they're in my profile, Learning, or absent, and after Phase 4, how they relate to rejections). Shows counts and facts, never causal claims. Demo seed with enough fake history to be meaningful.
+6. **Polish**: README with architecture diagram and decision log, screenshots/GIF from demo mode, CI (GitHub Actions), hosted read-only demo.
 **Current phase: 3, not started** (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page)
  
 ## Hosting

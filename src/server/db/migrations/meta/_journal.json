@@ -29,6 +29,13 @@
       "when": 1792450201312,
       "tag": "0003_resume_latex_source",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792453675351,
+      "tag": "0004_profile",
+      "breakpoints": true
     }
   ]
 }
