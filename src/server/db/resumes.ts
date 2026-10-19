@@ -11,6 +11,11 @@ export async function listResumes() {
 
 export type Resume = Awaited<ReturnType<typeof listResumes>>[number];
 
+export async function getResume(id: number) {
+  const db = getDb(await getMode());
+  return db.select().from(resumes).where(eq(resumes.id, id)).get();
+}
+
 export async function getActiveResume() {
   const db = getDb(await getMode());
   return db.select().from(resumes).where(eq(resumes.isActive, true)).get();

@@ -1,6 +1,8 @@
-import { Button } from "@/components/ui/button";
+import { FileTextIcon } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -58,6 +60,11 @@ export default async function ResumePage() {
               Saved {dateFormat.format(active.createdAt)}
               {active.latexSource ? " · LaTeX source attached" : ""}
             </CardDescription>
+            {active.latexSource && (
+              <CardAction>
+                <PdfLink resumeId={active.id} />
+              </CardAction>
+            )}
           </CardHeader>
           <CardContent className="space-y-3">
             {!active.latexSource && (
@@ -89,6 +96,22 @@ export default async function ResumePage() {
         </section>
       )}
     </div>
+  );
+}
+
+// A plain link to the PDF route, opened in a new tab: the browser shows
+// the PDF (or the plain-text error) itself, so no client code is needed.
+function PdfLink({ resumeId }: { resumeId: number }) {
+  return (
+    <a
+      href={`/api/resumes/${resumeId}/pdf`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={buttonVariants({ variant: "outline", size: "sm" })}
+    >
+      <FileTextIcon />
+      View PDF
+    </a>
   );
 }
 

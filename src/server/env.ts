@@ -25,6 +25,10 @@ const envSchema = z.object({
     z.string().optional(),
   ),
   ANTHROPIC_MODEL: z.string().optional().default("claude-opus-5-5"),
+  // The Tectonic executable for compiling LaTeX resumes (live mode only).
+  // "tectonic" works when it's on PATH; a full path avoids depending on
+  // the PATH of whatever started the server.
+  TECTONIC_PATH: z.string().optional().default("tectonic"),
   DATABASE_PATH: z.string().optional().default("./data/app.db"),
 });
 

@@ -1,40 +1,12 @@
 import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
 import { parseResumeFile } from "@/server/resume/parse";
+import { buildPdf } from "@/test/build-pdf";
 
 // These run the real unpdf and mammoth libraries against small files
 // built in memory, so they check that parsing actually works in Node and
 // that library failures become friendly errors. No fixture files are
 // committed, and no real resume is involved.
-
-// A minimal one-page PDF that draws each line with the built-in
-// Helvetica font. The xref table needs each object's byte offset, so
-// they're computed as the file is assembled.
-function buildPdf(lines: string[]): Uint8Array {
-  const escape = (text: string) => text.replace(/[\\()]/g, (char) => `\\${char}`);
-  const content = lines
-    .map((line, index) => `BT /F1 12 Tf 72 ${720 - index * 18} Td (${escape(line)}) Tj ET`)
-    .join("\n");
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-  ];
-
-  let pdf = "%PDF-1.4\n";
-  const offsets = objects.map((body, index) => {
-    const offset = pdf.length;
-    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
-    return offset;
-  });
-  const xrefOffset = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  pdf += offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("");
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
-  return new TextEncoder().encode(pdf);
-}
 
 // A minimal DOCX: a ZIP holding the three parts Word needs.
 async function buildDocx(paragraphs: string[]): Promise<Uint8Array> {

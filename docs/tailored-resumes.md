@@ -6,7 +6,7 @@ How Phase 3 turns your resume into a version tailored to one job listing, withou
 |---|---|---|
 | 1 | Store the LaTeX source with a resume version | Done |
 | 2 | Parse the LaTeX into editable parts, and write edits back | Done |
-| 3 | Compile to PDF with Tectonic | Planned |
+| 3 | Compile to PDF with Tectonic | Done |
 | 4 | Profile: everything you've done, plus "I have this" on comparison gaps | Planned |
 | 5 | Tailoring with the LLM, checked in code, reviewed by you | Planned |
 | 6 | Cover letters from the tailored resume | Planned |
@@ -138,3 +138,56 @@ The writer only checks *shape*: ids exist, an entry being edited has bullets, no
 - Your resume with one extra bullet and a longer summary ran to **two pages**. It's right at the one-page limit, so the page-count check in Step 3 matters.
 
 **Known limitation:** the Roboto font doesn't draw `\textbackslash`, so a backslash typed in resume text disappears from the PDF. It's harmless (the text still can't run as a command) and unlikely in a resume, so it's left as is.
+
+## Step 3: compiling to PDF
+
+Code: `src/server/latex/` (`tectonic.ts`, `compile.ts`, `demo-pdfs.ts`), the route `src/app/api/resumes/[id]/pdf/route.ts`, and `scripts/build-demo-pdfs.ts`.
+
+### How a compile runs
+
+`runTectonic(tex)`:
+
+1. Makes a fresh private temp folder, so concurrent compiles can't collide and nothing is left anywhere permanent.
+2. Writes the LaTeX to `resume.tex` there.
+3. Runs `tectonic -X compile --untrusted --only-cached resume.tex` with a 30-second timeout.
+4. Reads `resume.pdf`, counts its pages, and deletes the folder (even if something failed).
+
+**Security choices**, since the LaTeX contains model-written text:
+
+- **`execFile`, not `exec`.** No shell is involved, so nothing is ever interpreted as a shell command. The arguments are fixed; none come from user input.
+- **`--untrusted`.** Tectonic only enables TeX's shell escape (`\write18`, which can run programs) when asked with `-Z shell-escape`; `--untrusted` blocks even that, along with any other feature Tectonic considers insecure.
+- **`--only-cached`.** Compiling never touches the network. Packages must already be in Tectonic's cache, so compile your resume once from a terminal to download them (the error message says how if one is missing).
+- **Escaped text** (Step 2) means model text can't contain LaTeX commands in the first place. The flags are a second layer, not the only one.
+
+### Turning failures into messages
+
+Tectonic's error output is mostly TeX's transcript. The useful part is the first line shaped like `error: resume.tex:<line>: <message>`. `describeFailure` picks that out:
+
+| Situation | Kind | What you see |
+|---|---|---|
+| Tectonic not found | `not_installed` | Points to `TECTONIC_PATH` in `.env.example` |
+| ``File `x.sty' not found`` | `missing_package` | Names the package and the one-time command to download it |
+| Any other LaTeX error | `latex_error` | "Line 3: Undefined control sequence" |
+| Over 30 seconds | `timeout` | Stopped, with a message |
+
+### The PDF route, and why it isn't a Server Action
+
+`GET /api/resumes/:id/pdf` returns a version's PDF. It's a **route handler** because it returns a file the browser opens directly from a link (`target="_blank"`), and Server Actions are for mutations triggered from forms. It only reads, so it doesn't call `assertWritable()`, but it still requires a session. Responses are marked `Cache-Control: private, no-store` because a resume is personal data, and the page count is sent in an `X-Page-Count` header for later use.
+
+The Resume page's **View PDF** link is a plain `<a>`, so the page stays a Server Component with no client code for it.
+
+### Demo mode never compiles
+
+The public demo host has no TeX engine. Instead, `pnpm demo:pdfs` compiles every LaTeX document the demo can show, ahead of time, into `src/server/db/fixtures/pdf/`, and those PDFs are committed. Each file is named by a **hash of the LaTeX it came from** (`demoPdfKey`). At runtime, demo mode hashes the LaTeX it would have compiled and serves the matching file.
+
+Keying by content rather than by resume id or job means:
+
+- Tailored demo resumes (Step 5) work the same way: hash the edited LaTeX, serve its PDF.
+- A stale PDF can never be served for changed LaTeX; there just won't be a match. A test fails if the demo resume changes without re-running `pnpm demo:pdfs`.
+- Line endings are normalized before hashing, so a Windows checkout that converts the file to CRLF still finds the PDF.
+
+LaTeX with no pre-built PDF (for example, a `.tex` uploaded during the local demo preview) gets a clear "only the sample resume has PDFs in demo mode" message.
+
+### Tests
+
+The compiler is passed in as a function (`exec`), so tests fake every outcome (success, missing compiler, timeout, LaTeX error) without Tectonic installed, and check the temp folder is always deleted. One integration test compiles the demo resume with the real Tectonic, and skips itself on machines without it (set `TECTONIC_PATH` to run it).
