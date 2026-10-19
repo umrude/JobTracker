@@ -1,0 +1,149 @@
+% Demo resume for a fictional person (Alex Rivera). Never put real resume
+% content in this file: it's committed and served by the public demo.
+%
+% It uses the same layout and macros as the owner's real resume template,
+% so tailoring code written against one works on the other:
+%   - \section*{Summary}: one plain paragraph
+%   - Technical Skills: \resumeItem{\textbf{Category}: a, b, c}
+%   - Entries: \resumeSubheading{4 args} + a nested list of
+%     \resumeItem{\textbullet\ ...} bullets
+%
+% Differences from the original template:
+%   - The pdfTeX-only lines (glyphtounicode, \pdfgentounicode) are wrapped
+%     in \ifPDFTeX, so the file compiles under XeTeX engines like Tectonic
+%     as well as pdfLaTeX. XeTeX output is already machine-readable.
+%   - Unused packages removed (latexsym, marvosym, color, verbatim,
+%     tabularx); fewer packages means fewer for the engine to fetch.
+%   - The duplicated \setlength{\footskip} is set once.
+%   - Date ranges consistently use -- (an en dash).
+%
+% The content (with LaTeX escapes like \& and \% removed) matches
+% SEED_RESUME_V2 in seed.ts, which the demo comparisons were written
+% against. Keep the two in sync.
+
+\documentclass[letterpaper,10pt]{article}
+
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{iftex}
+
+% Font options
+\usepackage[sfdefault]{roboto}  % Sans-serif font
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\setlength{\footskip}{3.60004pt}
+
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Section formatting
+\titleformat{\section}{\Large\bfseries\scshape\raggedright}{}{0em}{}[\titlerule]
+
+% Ensure PDF is machine readable. pdfLaTeX needs these; XeTeX doesn't
+% (and doesn't define \pdfgentounicode), so only run them under pdfTeX.
+\ifPDFTeX
+  \input{glyphtounicode}
+  \pdfgentounicode=1
+\fi
+
+% Custom commands
+\newcommand{\resumeItem}[1]{\item\small{#1}}
+\newcommand{\resumeSubheading}[4]{
+\vspace{-1pt}\item
+  \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & #2 \\
+    \textit{#3} & \textit{#4} \\
+  \end{tabular*}\vspace{-7pt}
+}
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+\newcommand{\resumeSubHeadingList}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+
+\begin{document}
+
+\begin{center}
+  \textbf{\Huge Alex Rivera} \\
+  \small 555-0142 $|$ \href{mailto:alex.rivera@example.com}{alex.rivera@example.com} $|$
+  \href{https://github.com/alex-rivera-example}{github.com/alex-rivera-example} $|$
+  Portland, OR
+\end{center}
+
+\section*{Summary}
+Frontend engineer with 6 years of experience building data-heavy React and TypeScript applications. Led the rebuild of a real-time shipment tracking dashboard used by 400+ dispatchers. I care about performance, testing, and interfaces that work for everyone.
+
+\section{Technical Skills}
+\resumeSubHeadingList
+  \resumeItem{\textbf{Languages}: TypeScript, JavaScript, HTML, CSS, some SQL}
+  \resumeItem{\textbf{Frontend}: React, Next.js, D3, visx, Tailwind CSS, Storybook}
+  \resumeItem{\textbf{Real-time}: WebSockets, server-sent events}
+  \resumeItem{\textbf{Testing}: Playwright, Vitest, React Testing Library, axe-core}
+  \resumeItem{\textbf{Tools}: Git, GitHub Actions, Vercel, Figma (handoff only)}
+\resumeSubHeadingListEnd
+
+\section{Notable Projects}
+\resumeSubHeadingList
+  \resumeSubheading
+      {Dispatch Dashboard (Larkspur Logistics)}{2022 -- Present}
+      {Real-Time Shipment Tracking}{React, TypeScript, WebSockets}
+      \resumeSubHeadingList
+          \resumeItem{\textbullet\ Led the rebuild of a real-time shipment tracking dashboard used by 400+ dispatchers}
+          \resumeItem{\textbullet\ Cut time-to-interactive from 6s to 1.8s with virtualization and memoization}
+          \resumeItem{\textbullet\ Built fleet throughput charts with D3 and visx}
+      \resumeSubHeadingListEnd
+  \resumeSubheading
+      {Component Library (Copperline Media)}{2021 -- 2022}
+      {Shared React UI Kit}{React, Storybook}
+      \resumeSubHeadingList
+          \resumeItem{\textbullet\ Built a shared React component library with Storybook, used across the editorial tools and the public site}
+      \resumeSubHeadingListEnd
+\resumeSubHeadingListEnd
+
+\section{Experience}
+\resumeSubHeadingList
+  \resumeSubheading
+      {Senior Frontend Engineer}{2022 -- Present}
+      {Larkspur Logistics}{Portland, OR}
+      \resumeSubHeadingList
+          \resumeItem{\textbullet\ Introduced Playwright end-to-end tests and component tests in CI (GitHub Actions); flaky-test rate dropped below 1\%}
+          \resumeItem{\textbullet\ Mentored two junior engineers through code review and pairing}
+          \resumeItem{\textbullet\ Ran keyboard-navigation and ARIA fixes across the dashboard; added axe checks to CI}
+      \resumeSubHeadingListEnd
+  \resumeSubheading
+      {Frontend Developer}{2020 -- 2022}
+      {Copperline Media}{Portland, OR}
+      \resumeSubHeadingList
+          \resumeItem{\textbullet\ Built a Next.js publishing front end serving 2M monthly readers}
+          \resumeItem{\textbullet\ Wrote Node.js API routes and simple PostgreSQL queries for the editorial tools}
+      \resumeSubHeadingListEnd
+  \resumeSubheading
+      {Junior Web Developer}{2019 -- 2020}
+      {Fennel \& Finch Agency}{Portland, OR}
+      \resumeSubHeadingList
+          \resumeItem{\textbullet\ Built responsive marketing sites with HTML, CSS, and JavaScript}
+      \resumeSubHeadingListEnd
+\resumeSubHeadingListEnd
+
+\section{Education}
+\resumeSubHeadingList
+  \resumeSubheading
+      {Willamette Valley State University}{Salem, OR}
+      {B.S. Computer Science}{2015 -- 2019}
+\resumeSubHeadingListEnd
+
+\end{document}

@@ -64,37 +64,52 @@ Frontend Developer, Copperline Media (2020-2022)
 Skills
 React, TypeScript, JavaScript, CSS, Playwright, Git`;
 
+// The plain-text form of fixtures/demo-resume.tex (same content, LaTeX
+// removed), laid out the way a parsed PDF of it would read. Keep the two
+// in sync; the demo comparisons in compare-demo.ts were written against it.
 export const SEED_RESUME_V2 = `Alex Rivera
-alex.rivera@example.com · Portland, OR · github.com/alex-rivera-example
+555-0142 | alex.rivera@example.com | github.com/alex-rivera-example | Portland, OR
 
 Summary
-Frontend engineer with 6 years of experience building data-heavy React and TypeScript applications. I care about performance, testing, and interfaces that work for everyone.
+Frontend engineer with 6 years of experience building data-heavy React and TypeScript applications. Led the rebuild of a real-time shipment tracking dashboard used by 400+ dispatchers. I care about performance, testing, and interfaces that work for everyone.
 
-Experience
-Senior Frontend Engineer, Larkspur Logistics (2022-present)
-- Led the rebuild of a real-time shipment tracking dashboard (React, TypeScript, WebSockets) used by 400+ dispatchers; cut time-to-interactive from 6s to 1.8s with virtualization and memoization.
-- Built fleet throughput charts with D3 and visx.
-- Introduced Playwright end-to-end tests and component tests in CI (GitHub Actions); flaky-test rate dropped below 1%.
-- Mentored two junior engineers through code review and pairing.
-- Ran keyboard-navigation and ARIA fixes across the dashboard; added axe checks to CI.
-
-Frontend Developer, Copperline Media (2020-2022)
-- Built a Next.js publishing front end serving 2M monthly readers.
-- Wrote Node.js API routes and simple PostgreSQL queries for the editorial tools.
-- Built a shared React component library with Storybook.
-
-Junior Web Developer, Fennel & Finch Agency (2019-2020)
-- Built responsive marketing sites with HTML, CSS, and JavaScript.
-
-Skills
+Technical Skills
 Languages: TypeScript, JavaScript, HTML, CSS, some SQL
 Frontend: React, Next.js, D3, visx, Tailwind CSS, Storybook
 Real-time: WebSockets, server-sent events
 Testing: Playwright, Vitest, React Testing Library, axe-core
 Tools: Git, GitHub Actions, Vercel, Figma (handoff only)
 
+Notable Projects
+Dispatch Dashboard (Larkspur Logistics) | 2022 - Present
+Real-Time Shipment Tracking | React, TypeScript, WebSockets
+- Led the rebuild of a real-time shipment tracking dashboard used by 400+ dispatchers
+- Cut time-to-interactive from 6s to 1.8s with virtualization and memoization
+- Built fleet throughput charts with D3 and visx
+
+Component Library (Copperline Media) | 2021 - 2022
+Shared React UI Kit | React, Storybook
+- Built a shared React component library with Storybook, used across the editorial tools and the public site
+
+Experience
+Senior Frontend Engineer | 2022 - Present
+Larkspur Logistics | Portland, OR
+- Introduced Playwright end-to-end tests and component tests in CI (GitHub Actions); flaky-test rate dropped below 1%
+- Mentored two junior engineers through code review and pairing
+- Ran keyboard-navigation and ARIA fixes across the dashboard; added axe checks to CI
+
+Frontend Developer | 2020 - 2022
+Copperline Media | Portland, OR
+- Built a Next.js publishing front end serving 2M monthly readers
+- Wrote Node.js API routes and simple PostgreSQL queries for the editorial tools
+
+Junior Web Developer | 2019 - 2020
+Fennel & Finch Agency | Portland, OR
+- Built responsive marketing sites with HTML, CSS, and JavaScript
+
 Education
-B.S. Computer Science, Willamette Valley State University (2019)`;
+Willamette Valley State University | Salem, OR
+B.S. Computer Science | 2015 - 2019`;
 
 // Jobs with no application: these appear on the Saved jobs page. Their
 // URLs are also the keys for the canned demo comparison results, so keep
