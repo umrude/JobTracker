@@ -56,9 +56,15 @@ export default async function ResumePage() {
             <CardTitle>Active: version {active.version}</CardTitle>
             <CardDescription>
               Saved {dateFormat.format(active.createdAt)}
+              {active.latexSource ? " · LaTeX source attached" : ""}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {!active.latexSource && (
+              <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                Upload your .tex to enable tailored resumes.
+              </p>
+            )}
             <p className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-md border p-3 font-mono text-xs">
               {active.text}
             </p>
@@ -96,6 +102,7 @@ function VersionRow({ resume, disabled }: { resume: Resume; disabled: boolean })
             {" "}
             · {dateFormat.format(resume.createdAt)} ·{" "}
             {resume.text.length.toLocaleString("en-US")} characters
+            {resume.latexSource ? " · LaTeX" : ""}
           </span>
         </span>
         {resume.isActive ? (

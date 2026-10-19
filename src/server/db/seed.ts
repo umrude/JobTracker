@@ -24,6 +24,14 @@ const MIGRATIONS_FOLDER = path.join(
   "src/server/db/migrations",
 );
 
+// v2's LaTeX source, so the demo has a tailorable resume. v1 has none, to
+// show the "upload your .tex" state in the version history. cwd-relative
+// for the same reason as MIGRATIONS_FOLDER.
+const DEMO_RESUME_TEX_PATH = path.join(
+  process.cwd(),
+  "src/server/db/fixtures/demo-resume.tex",
+);
+
 function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
@@ -370,7 +378,13 @@ export function seedDemoDatabase(): number {
     .insert(schema.resumes)
     .values([
       { text: SEED_RESUME_V1, version: 1, isActive: false, createdAt: daysAgo(120) },
-      { text: SEED_RESUME_V2, version: 2, isActive: true, createdAt: daysAgo(14) },
+      {
+        text: SEED_RESUME_V2,
+        latexSource: fs.readFileSync(DEMO_RESUME_TEX_PATH, "utf8"),
+        version: 2,
+        isActive: true,
+        createdAt: daysAgo(14),
+      },
     ])
     .returning()
     .all();

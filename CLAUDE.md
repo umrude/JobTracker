@@ -61,6 +61,8 @@ src/
 - Every LLM function has a demo path returning canned fixtures. Demo mode makes no network calls.
 - Save results (comparisons, later cover letters) so reopening a job doesn't re-run the model. Re-running is an explicit user action.
 - Resume uploads (PDF/DOCX) are parsed to text on the server and only the text is stored. Never persist the uploaded file. Enforce a size limit and show friendly errors for unreadable files.
+- An optional LaTeX source (.tex) can be attached to a resume version. It's stored as text (never the file), validated, and given `\ifPDFTeX` guards on upload so it compiles under Tectonic. Tailoring requires it.
+- Tailoring must never invent anything. Every skill, bullet, and fact in a tailored resume must trace back to the resume or the profile, and the app checks this in code, not only in the prompt.
 - The user can preview and edit parsed resume text before saving.
 - Demo seed data uses a fake resume only.
 - Mock the Anthropic client in tests; tests must never hit the real API.
@@ -71,7 +73,8 @@ src/
  
 - **Job**: company, title, url, listing text, source, savedAt. A job with no linked application is a "saved job".
 - **Application**: job, status, appliedAt, notes
-- **Resume**: parsed text (no original file), version, isActive, createdAt
+- **Resume**: parsed text (no original file), optional LaTeX source text, version, isActive, createdAt
+- **Profile** (Phase 3): skills (by category), entries (experience, projects, education) with bullets. A superset of any one resume; each item notes whether it came from the resume or was added by me
 - **Comparison**: job, resume, result JSON (Zod-validated), createdAt
 - **EmailEvent** (Phase 4): gmail message id, thread id, linked application, classified type, confidence, confirmed flag
 - **CoverLetter** (Phase 3): job, resume used, tone, versions
@@ -98,11 +101,17 @@ Work on one phase at a time. Do not start a later phase unless I ask.
  
 1. **(Done) Foundation + manual kanban**: scaffold, Drizzle schema, seed data, `getMode()`/`assertWritable()`, auth, kanban with manual add/move/edit.
 2. **(Done) Saved jobs + resume comparison**: save listings, upload/parse resume, LLM comparison with Zod-validated output.
-3. **Cover letters + tailored resumes**: a "Prepare application" action on a comparison. First a tailored resume: the LLM proposes structured edits (rewrite the summary, reorder/select skills and bullets, reword using the listing's terms) that only emphasize what's already in the resume, never invent experience, and are reviewed before use. If a LaTeX source is provided (stored as text, like the parsed resume), apply approved edits and compile to PDF in a sandbox (no shell escape, model text escaped, never raw LaTeX from the model); without one, output tailored text. Then a cover letter from the listing + tailored resume, with tone/length options. Versions per job. Open question: hosting, since PDF compilation needs a TeX engine.
+3. **Cover letters + tailored resumes**: a "Prepare application" action on a comparison. A **profile** holds everything I've done (imported from my .tex, plus extra skills, bullets, projects, and schooling that don't fit on one page); tailoring draws only from it. Gaps on the comparison page get an "I have this" button that adds a confirmed skill to the profile. First a tailored resume: the LLM proposes structured edits (rewrite the summary, select/reorder skills and bullets from the profile, light rewording using the listing's terms) that never invent experience, are checked in code (no new skills, no new numbers), stay within one page (warn with suggestions if not), and are reviewed before use. Without a .tex, tailoring is unavailable ("Upload your .tex to enable tailored resumes"). If a LaTeX source is provided (stored as text, like the parsed resume), apply approved edits and compile to PDF in a sandbox (no shell escape, model text escaped, never raw LaTeX from the model); without one, output tailored text. Then a cover letter from the listing + tailored resume, with tone/length options. Versions per job. PDFs compile with Tectonic, which runs on the local live app (see Hosting).
 4. **Gmail sync**: OAuth, incremental sync, pre-filter, classifier, review inbox, classifier eval set.
 5. **Polish**: README with architecture diagram and decision log, screenshots/GIF from demo mode, CI (GitHub Actions), hosted read-only demo.
 **Current phase: 3, not started** (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page)
  
+## Hosting
+
+- **Live app**: runs on my own machine (`pnpm build && pnpm start`), not on a server. Personal data (resumes, Gmail) stays local. Tectonic is installed locally for PDF compilation.
+- **Public demo** (`DEMO_MODE=true`): hosted separately on a cheap/free Node host. Read-only, reseeded on start, no persistent disk, and no TeX engine: demo PDFs are pre-built fixtures, never compiled on the host.
+- Don't add anything that requires the live app to be always-on or publicly reachable.
+
 ## Working style
  
 I'm using this project to get better at TypeScript and Next.js. When you make a non-obvious choice (Server vs Client Component, how a Server Action is structured, a Zod pattern), add a brief explanation of why in your response. Keep commits small and focused, with clear messages.

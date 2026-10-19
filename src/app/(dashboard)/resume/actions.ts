@@ -8,6 +8,7 @@ import { activateResume, createResumeVersion } from "@/server/db/resumes";
 import { activateResumeSchema, saveResumeSchema } from "@/lib/schemas/resume";
 import { RESUME_FILE_ERRORS, type ParseResumeState } from "@/lib/resume-file";
 import { validationError, type FormState } from "@/lib/form-state";
+import { LATEX_SOURCE_MAX, addPdfTexGuards, checkLatexSource } from "@/lib/latex/source";
 
 // Step one of two: turn the uploaded file into text and send the text
 // back. Nothing is saved. Splitting parse and save into two actions is
@@ -38,7 +39,8 @@ export async function parseResumeAction(
   return { status: "parsed", text: result.text, fileName: file.name };
 }
 
-// Step two: save the (possibly edited) text as a new active version.
+// Step two: save the (possibly edited) text as a new active version, with
+// the optional LaTeX source that tailored resumes are built from.
 export async function saveResumeAction(
   _prevState: FormState,
   formData: FormData,
@@ -49,9 +51,42 @@ export async function saveResumeAction(
   const parsed = saveResumeSchema.safeParse({ text: formData.get("text") });
   if (!parsed.success) return validationError(parsed.error);
 
-  await createResumeVersion(parsed.data.text);
+  const latex = await readLatexUpload(formData.get("latexFile"));
+  if (!latex.ok) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: { latexFile: [latex.message] },
+    };
+  }
+
+  await createResumeVersion(parsed.data.text, latex.source);
   revalidatePath("/resume");
   return { status: "success" };
+}
+
+// The .tex upload is optional: an empty file input arrives as a File with
+// size 0. Only the text is kept, never the file, same as the PDF/DOCX.
+async function readLatexUpload(
+  value: FormDataEntryValue | null,
+): Promise<{ ok: true; source: string | null } | { ok: false; message: string }> {
+  if (!(value instanceof File) || value.size === 0) return { ok: true, source: null };
+
+  if (!value.name.toLowerCase().endsWith(".tex")) {
+    return { ok: false, message: "The LaTeX source must be a .tex file." };
+  }
+  // Check the byte size before reading. UTF-8 is at most 4 bytes per
+  // character, so this can't reject a file within the character limit.
+  if (value.size > LATEX_SOURCE_MAX * 4) {
+    return { ok: false, message: "That .tex file is far too large for a resume." };
+  }
+
+  const check = checkLatexSource(await value.text());
+  if (!check.ok) return check;
+
+  // Make it compile under Tectonic (XeTeX). Idempotent, so a file that's
+  // already guarded is stored unchanged.
+  return { ok: true, source: addPdfTexGuards(check.source).source };
 }
 
 export async function activateResumeAction(formData: FormData) {

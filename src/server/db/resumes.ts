@@ -22,7 +22,7 @@ export async function getActiveResume() {
 // old active row is switched off *before* the insert, because the
 // partial unique index (resumes_one_active) would reject the new row
 // while the old one is still active.
-export async function createResumeVersion(text: string) {
+export async function createResumeVersion(text: string, latexSource: string | null) {
   const db = getDb(await getMode());
   return db.transaction((tx) => {
     const { maxVersion } = tx
@@ -37,7 +37,7 @@ export async function createResumeVersion(text: string) {
 
     return tx
       .insert(resumes)
-      .values({ text, version: maxVersion + 1, isActive: true })
+      .values({ text, latexSource, version: maxVersion + 1, isActive: true })
       .returning()
       .get();
   });

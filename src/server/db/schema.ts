@@ -49,6 +49,10 @@ export const resumes = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     text: text("text").notNull(),
+    // Optional LaTeX source for this version, stored as text like `text`
+    // (the uploaded file itself is never kept). Tailored resumes are built
+    // from it; without it, tailoring is unavailable for this version.
+    latexSource: text("latex_source"),
     version: integer("version").notNull(),
     isActive: integer("is_active", { mode: "boolean" })
       .notNull()

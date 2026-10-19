@@ -1,0 +1,1 @@
+ALTER TABLE `resumes` ADD `latex_source` text;

@@ -147,6 +147,7 @@ function ResumeEditor({
   );
 
   const textErrors = state.status === "error" ? state.fieldErrors.text : undefined;
+  const latexErrors = state.status === "error" ? state.fieldErrors.latexFile : undefined;
 
   return (
     <form action={formAction} className="space-y-3">
@@ -167,6 +168,19 @@ function ResumeEditor({
           autoFocus
         />
         {textErrors?.map((error) => (
+          <p key={error} className="text-sm text-destructive">
+            {error}
+          </p>
+        ))}
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="latexFile">LaTeX source (optional)</Label>
+        <Input id="latexFile" name="latexFile" type="file" accept=".tex" />
+        <p className="text-xs text-muted-foreground">
+          If your resume is written in LaTeX, add the .tex file to enable tailored
+          resumes. Only its text is kept.
+        </p>
+        {latexErrors?.map((error) => (
           <p key={error} className="text-sm text-destructive">
             {error}
           </p>

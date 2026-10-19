@@ -1,0 +1,80 @@
+# Tailored resumes
+
+How Phase 3 turns your resume into a version tailored to one job listing, without ever adding anything untrue. This doc explains the design and the reasons behind it; the code comments cover the details. It grows as each step lands.
+
+| Step | What | Status |
+|---|---|---|
+| 1 | Store the LaTeX source with a resume version | Done |
+| 2 | Parse the LaTeX into editable parts, and write edits back | Planned |
+| 3 | Compile to PDF with Tectonic | Planned |
+| 4 | Profile: everything you've done, plus "I have this" on comparison gaps | Planned |
+| 5 | Tailoring with the LLM, checked in code, reviewed by you | Planned |
+| 6 | Cover letters from the tailored resume | Planned |
+| 7 | The "Prepare application" page | Planned |
+
+## The flow
+
+1. You upload your resume (PDF/DOCX, parsed to text) and, optionally, its LaTeX source.
+2. You compare it against a saved job (Phase 2).
+3. On "Prepare application", the model proposes a tailored version: a rewritten summary, plus skills and bullets selected and ordered for this job, with light rewording.
+4. The app checks the proposal (nothing new, no invented numbers). You review each change, then approve.
+5. The approved edits are applied to your LaTeX source and compiled to a PDF.
+6. A cover letter is written from the listing plus the tailored resume, so both stress the same experience.
+
+## Honesty: what the model can and can't do
+
+The model can **choose, order, and lightly reword**. It can't **add**. "Don't lie" is in the prompt, but the prompt alone isn't a guarantee, so the important rules are enforced in code:
+
+- **Skills** in the output must all exist in your resume or profile. Reordering is fine; a new skill fails the check.
+- **Bullets** are referenced by ID. A bullet ID that doesn't exist fails the check.
+- **Numbers** in a reworded bullet must appear in the original. This catches invented metrics ("increased sales 40%"), the most common way tailoring turns into fabrication.
+- **You review every change** before anything is used. The checks catch the mechanical lies; your review catches the subtle ones.
+
+A failed check gets one retry, then a clear error, the same pattern as comparisons.
+
+### The profile (Step 4)
+
+A one-page resume leaves things out. The profile holds everything: it starts as an import of your .tex, and you add the bullets, skills, projects, and schooling that didn't fit. Tailoring draws only from the profile, so "it must trace back to something you provided" stays checkable even when the output includes things your current resume doesn't.
+
+When a comparison lists a gap, an **"I have this"** button adds that skill to your profile. You confirmed it, so using it later is honest. The comparison itself keeps scoring the resume as written, since that's what an applicant tracking system sees.
+
+## Step 1: storing the LaTeX source
+
+**Why store the source as text?** The project rule is to never keep uploaded files, only text. A `.tex` file *is* text, so storing its contents keeps to the spirit of the rule: no binary files, nothing to clean up, and it lives in the same database row as the version it belongs to (`resumes.latex_source`). It's optional; a version without it simply can't be tailored, and the Resume page says "Upload your .tex to enable tailored resumes."
+
+**Where it's attached.** On the review step of the upload, next to the parsed text, so one version holds both. Validation happens in the Server Action (`saveResumeAction`), with pure helpers from `src/lib/latex/source.ts`:
+
+- `checkLatexSource` rejects empty input, anything over 100,000 characters, binary files (a NUL character means it isn't text), and files without `\begin{document}` ... `\end{document}`.
+- The byte size is checked *before* the file is read, so a huge upload is rejected cheaply.
+
+### The `\ifPDFTeX` guards
+
+Many resume templates (including yours) contain two lines that only pdfLaTeX understands:
+
+```latex
+\input{glyphtounicode}
+\pdfgentounicode=1
+```
+
+They make the PDF's text readable by applicant tracking systems. Tectonic uses the XeTeX engine, which doesn't define them and stops with an error. XeTeX's output is already readable, so the fix is to run those lines only under pdfLaTeX:
+
+```latex
+\usepackage{iftex}
+\ifPDFTeX
+\input{glyphtounicode}
+\fi
+```
+
+`addPdfTexGuards` does this automatically on upload. Three details that matter:
+
+- **One guard per line.** In real templates the two lines can be far apart, with fonts and margins in between. One big `\ifPDFTeX` block around both would hide all of that from XeTeX and quietly change the layout.
+- **Idempotent.** Running it on its own output changes nothing, and lines already inside an `\ifPDFTeX ... \fi` block (one guard each, or a shared block) are left alone. So re-uploading never stacks guards.
+- **Line endings are kept.** Windows `\r\n` files stay `\r\n`.
+
+The file still compiles exactly as before under pdfLaTeX, so the same `.tex` works wherever you compile it today.
+
+### Why Tectonic
+
+Tectonic is a single binary, it turns off risky TeX features with `--untrusted`, and it can be forced offline with `--only-cached`. That matters because tailored text ends up inside a LaTeX file: without those restrictions, LaTeX can read files on the machine (`\input{...}`) or run commands. The live app runs on your own machine (see Hosting in CLAUDE.md), where Tectonic is installed. The public demo has no TeX engine; it serves pre-built PDFs.
+
+Tested so far: the demo template and your resume (with the guards) both compile to one page, and their text extracts cleanly. The first compile downloads packages (about 80 seconds); after that a compile takes about 1.5 seconds.
