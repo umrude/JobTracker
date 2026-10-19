@@ -1,5 +1,6 @@
-import { ExternalLinkIcon, PencilIcon, PlusIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { ExternalLinkIcon, PencilIcon, PlusIcon, ScaleIcon } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardAction,
@@ -120,7 +121,16 @@ function SavedJobCard({ job, disabled }: { job: SavedJob; disabled: boolean }) {
           </p>
         )}
       </CardContent>
-      <CardFooter className="justify-end">
+      <CardFooter className="justify-end gap-2">
+        {/* A real link styled as a button, so it navigates (and can open
+            in a new tab) like any link. */}
+        <Link
+          href={`/compare/${job.id}`}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          <ScaleIcon />
+          Compare
+        </Link>
         <MoveToAppliedButton jobId={job.id} disabled={disabled} />
       </CardFooter>
     </Card>

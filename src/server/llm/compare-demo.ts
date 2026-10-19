@@ -1,4 +1,7 @@
-import "server-only";
+// No "server-only" here, like schema.ts: the seed script (pnpm db:seed)
+// imports these fixtures under tsx, outside Next's bundler, where the real
+// "server-only" package throws. This file is canned data with no I/O or
+// secrets, so the risk that rule guards against doesn't apply.
 import { comparisonSchema, type Comparison, type ComparisonInput } from "@/lib/schemas/comparison";
 
 // Canned comparison results for demo mode, so it never calls the API.

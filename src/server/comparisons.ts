@@ -1,11 +1,56 @@
 import "server-only";
 import { getMode } from "@/server/mode";
 import { getActiveResume } from "@/server/db/resumes";
-import { getJobForComparison, insertComparison } from "@/server/db/comparisons";
+import {
+  getJobForComparison,
+  getLatestComparisonRow,
+  insertComparison,
+  listLatestComparisonRows,
+  type ComparisonRow,
+} from "@/server/db/comparisons";
 import { getLlmClient } from "@/server/llm/client";
 import { compareResume } from "@/server/llm/compare";
 import { DEMO_MODEL, getDemoComparison } from "@/server/llm/compare-demo";
+import { comparisonSchema, type Comparison } from "@/lib/schemas/comparison";
 import type { LlmError } from "@/lib/llm-result";
+
+type StoredMeta = {
+  resumeId: number;
+  resumeVersion: number;
+  model: string;
+  createdAt: Date;
+};
+
+// A saved comparison as the UI sees it. The stored JSON is re-validated on
+// every read. A row that no longer passes the schema (e.g. written before
+// a schema change) becomes "invalid" and the page offers a re-run, rather
+// than crashing or trusting data of the wrong shape.
+export type StoredComparison =
+  | ({ status: "ok"; comparison: Comparison } & StoredMeta)
+  | ({ status: "invalid" } & StoredMeta);
+
+function toStoredComparison(row: ComparisonRow): StoredComparison {
+  const meta: StoredMeta = {
+    resumeId: row.resumeId,
+    resumeVersion: row.resumeVersion,
+    model: row.model,
+    createdAt: row.createdAt,
+  };
+  const parsed = comparisonSchema.safeParse(row.result);
+  return parsed.success
+    ? { status: "ok", comparison: parsed.data, ...meta }
+    : { status: "invalid", ...meta };
+}
+
+export async function getLatestComparison(jobId: number): Promise<StoredComparison | null> {
+  const row = await getLatestComparisonRow(jobId);
+  return row ? toStoredComparison(row) : null;
+}
+
+export async function listLatestComparisons(): Promise<Map<number, StoredComparison>> {
+  const rows = await listLatestComparisonRows();
+  return new Map([...rows].map(([jobId, row]) => [jobId, toStoredComparison(row)]));
+}
 
 export type RunComparisonError =
   | LlmError

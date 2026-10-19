@@ -11,6 +11,9 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "@/server/db/schema";
 import { DEMO_DB_PATH } from "@/server/db/paths";
 import type { Status } from "@/lib/schemas/status";
+import { DEMO_MODEL, getDemoComparison } from "@/server/llm/compare-demo";
+
+const UNCOMPARED_SEED_JOB_URL = "https://pebblebrookhealth.example/careers/4410";
 
 // process.cwd()-relative, not import.meta.dirname: this module runs both
 // directly under tsx (pnpm db:seed) and dynamically imported inside a
@@ -348,15 +351,18 @@ export function seedDemoDatabase(): number {
   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
   // Two versions so the demo shows the version history; v2 is active.
-  db.insert(schema.resumes)
+  const [, activeResume] = db
+    .insert(schema.resumes)
     .values([
       { text: SEED_RESUME_V1, version: 1, isActive: false, createdAt: daysAgo(120) },
       { text: SEED_RESUME_V2, version: 2, isActive: true, createdAt: daysAgo(14) },
     ])
-    .run();
+    .returning()
+    .all();
 
   for (const seedJob of SEED_SAVED_JOBS) {
-    db.insert(schema.jobs)
+    const job = db
+      .insert(schema.jobs)
       .values({
         company: seedJob.company,
         title: seedJob.title,
@@ -366,7 +372,23 @@ export function seedDemoDatabase(): number {
         notes: seedJob.notes,
         savedAt: daysAgo(seedJob.savedDaysAgo),
       })
-      .run();
+      .returning()
+      .get();
+
+    // Canned comparisons, so the read-only public demo has results to show.
+    // One job is left uncompared on purpose, to demo the empty state (and,
+    // in the writable local preview, running a comparison).
+    if (activeResume && seedJob.url !== UNCOMPARED_SEED_JOB_URL) {
+      db.insert(schema.comparisons)
+        .values({
+          jobId: job.id,
+          resumeId: activeResume.id,
+          result: getDemoComparison(seedJob.url),
+          model: DEMO_MODEL,
+          createdAt: daysAgo(Math.max(seedJob.savedDaysAgo - 1, 0)),
+        })
+        .run();
+    }
   }
 
   for (const seedApp of SEED_APPLICATIONS) {
