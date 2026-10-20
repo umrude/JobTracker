@@ -19,6 +19,8 @@ export type SkillResolver = {
   // Every known way of writing the skill with this canonical key: its
   // name and all aliases (built-in and yours).
   termsFor(key: string): string[];
+  // Every known term with its canonical key, for finding skills in prose.
+  knownTerms(): { term: string; key: string }[];
 };
 
 export function createSkillResolver(
@@ -59,6 +61,9 @@ export function createSkillResolver(
     },
     termsFor(key) {
       return [...(terms.get(key) ?? [])];
+    },
+    knownTerms() {
+      return [...terms].flatMap(([key, set]) => [...set].map((term) => ({ term, key })));
     },
   };
 }

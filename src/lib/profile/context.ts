@@ -31,8 +31,10 @@ export function skillHasContext(skill: ProfileSkill, profile: Profile): boolean 
 // Whether `text` mentions `term` as a whole term, not inside another word:
 // "go" isn't in "good", but "node.js" is in "built node.js apis". Terms
 // can contain punctuation (c++, node.js), so the boundaries are "not a
-// letter or digit" rather than regex word boundaries.
+// letter or digit" rather than regex word boundaries. A dot counts as a
+// boundary after a term (it ends sentences) but not before one, so "js"
+// isn't found in "react.js".
 export function mentions(text: string, term: string): boolean {
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`).test(text);
+  return new RegExp(`(^|[^a-z0-9.])${escaped}($|[^a-z0-9])`).test(text);
 }

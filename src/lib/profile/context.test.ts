@@ -80,6 +80,11 @@ describe("mentions", () => {
     expect(mentions("javascript apps", "java")).toBe(false);
   });
 
+  it("doesn't find a term inside a dotted name, but does at a sentence end", () => {
+    expect(mentions("built with react.js and next.js", "js")).toBe(false);
+    expect(mentions("wrote plain js.", "js")).toBe(true);
+  });
+
   it("handles terms with punctuation", () => {
     expect(mentions("wrote c++ and c# services", "c++")).toBe(true);
     expect(mentions("wrote c++ and c# services", "c#")).toBe(true);

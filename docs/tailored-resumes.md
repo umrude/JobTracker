@@ -10,7 +10,9 @@ How Phase 3 turns your resume into a version tailored to one job listing, withou
 | 4a | Profile schema, and import from the .tex | Done |
 | 4b | Profile page: view and edit | Done |
 | 4c | Skill names (aliases), comparison skill rows, "I have this" | Done |
-| 5 | Tailoring with the LLM, checked in code, reviewed by you | Planned |
+| 5a | Tailoring groundwork: writer extension, proposal schema, honesty checker | Done |
+| 5b | Tailoring with the LLM, storage, demo fixtures | Planned |
+| 5c | Review, approve, compile | Planned |
 | 6 | Cover letters from the tailored resume | Planned |
 | 7 | The "Prepare application" page, and the tailored comparison | Planned |
 
@@ -397,3 +399,70 @@ Every answer is recorded with `source = "gap"` and the job that prompted it. The
 ### Demo
 
 The Granite & Gale comparison now lists Python as a gap: the listing names it as a nice-to-have, and Alex's resume doesn't mention it, but Alex's profile has it (coursework). So the demo shows an "In profile" gap.
+
+## Step 5: tailoring
+
+### Decisions
+
+| Question | Decision |
+|---|---|
+| A proposal still fails the checker after one retry | Offending items are reverted to your words (or removed) and **flagged in review**, rather than failing the whole proposal. |
+| Moving bullets between entries | Never. A bullet stays with the job it belongs to. |
+| Sections your .tex doesn't have | The model may propose a **new section** when profile entries in it fit the listing better. It's a change like any other: you accept or reject it in review. |
+| Rewording limits | No new numbers, no new skills, and at most ~20% longer. |
+| Review | Accept or reject **each change**, plus "Accept all" with a confirmation. |
+
+### Step 5a: the groundwork (no LLM)
+
+Code: `src/lib/latex/resume.ts` (extended), `src/lib/schemas/tailoring.ts`, and `src/lib/tailoring/`.
+
+#### The proposal
+
+The model will answer with a **proposal** that refers to your profile by id (`skill:12`, `entry:7`, `bullet:40`). The only free text is the summary and reworded bullets. Skill names, entry headings, and dates always come from your profile, so the model can't rename a skill or change a date. It also returns a `trimOrder` (bullets least important first, for the one-page suggestions) and a short rationale for the review screen.
+
+#### The honesty checker
+
+`checkProposal` runs before you see anything. It never throws and never fixes things silently: every violation removes the item or reverts it to your own words, and records an **issue** (which item, what was wrong, what happened) that the review screen shows as a flag.
+
+| Rule | What happens |
+|---|---|
+| A skill, entry, or bullet id isn't in your profile | Removed |
+| A Learning skill on the resume | Removed |
+| A skill category that isn't in your .tex | Removed |
+| A bullet placed under a different entry | Removed there |
+| An entry placed in a section it doesn't belong to | Removed there |
+| A rewording adds a number the original doesn't have | Original kept |
+| A rewording adds a skill the original doesn't mention | Original kept |
+| A rewording grows more than ~20% | Original kept |
+| The summary uses a number that isn't anywhere in your profile | Original summary kept |
+| The summary claims a skill that's Learning, missing, or has no context | Original summary kept |
+| An entry ends up with no bullets | Its original bullets kept |
+
+Two rules carry more weight than they look:
+
+- **"A rewording may not add a skill"** also enforces "personal-project skills are never implied as professional": a job bullet can't gain Leaflet if it didn't mention Leaflet. And it blocks most invented claims, which usually take the form of an extra technology.
+- **"No new numbers"** catches invented metrics ("cut bugs by 40%"), the most common way tailoring turns into fabrication. Numbers are normalized first ("1,000+" is 1000, "1.8s" is 1.8).
+
+**Finding skills in prose.** `skillKeysIn` looks for every skill term the resolver knows. Many skill names are also ordinary words ("Go" in "go-to debugger", "Next" in "next steps", "REST" in "the rest of"), so a short list of ambiguous words isn't used for detection; their unambiguous forms (Golang, Next.js, REST APIs) still are. The trade-off is that a rewording adding one of those plain words isn't caught by this rule, so your review catches it.
+
+**A boundary fix this surfaced.** The built-in alias "js" was being found inside "React.js". `mentions()` now treats a dot as a boundary after a term (it ends sentences) but not before one. That also made the "No context" label, wording notes, and similar-skill suggestions more accurate.
+
+The model's `isNew` flag on a section is treated as advisory: whether a section exists is a fact about your .tex, so the checker decides.
+
+#### New entries and sections in the LaTeX
+
+The writer (Step 2) could only edit entries already in the .tex. It can now also:
+
+- **reorder and remove entries** within a section, keeping each kept entry's exact LaTeX;
+- **add an entry from your profile** that isn't in the .tex;
+- **add a whole new section**, after a section you name, or last.
+
+New entries and sections are built by **copying an existing one as a template** and replacing its text (escaped, as always). That's why they come out formatted exactly like the rest of your resume: same macros, spacing, and indentation, with no layout code of our own. A compiled test resume with an added project and a new Volunteering section looked identical in style to the original sections.
+
+#### From proposal to LaTeX
+
+`toResumeEdits` maps a checked proposal from profile ids to positions in the .tex. It applies the rule that the profile owns content: an entry that's in the .tex keeps its exact LaTeX if its heading is unchanged, but if you've edited the heading on the Profile page, it's rebuilt from the profile.
+
+#### Tests
+
+The checker has a test per rule, run against Alex's real demo profile (built in memory with the actual import planner). A pipeline test runs the whole chain (proposal, checker, edits, LaTeX, re-parse) and checks the result section by section.

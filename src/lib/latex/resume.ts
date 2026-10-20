@@ -8,7 +8,7 @@ import {
   type Group,
 } from "@/lib/latex/scan";
 import { latexToPlain, plainToLatex } from "@/lib/latex/text";
-import type { ResumeEdits } from "@/lib/schemas/resume-edits";
+import type { EntryEdit, ResumeEdits } from "@/lib/schemas/resume-edits";
 
 // Reads a LaTeX resume into its editable parts, and writes edits back.
 //
@@ -19,9 +19,11 @@ import type { ResumeEdits } from "@/lib/schemas/resume-edits";
 //   any other \section       \resumeSubheading{4 args}, optionally followed by
 //                            \resumeSubHeadingList \resumeItem{...} ... \resumeSubHeadingListEnd
 //
-// Everything outside those editable parts (the header, entry headings,
-// dates, education) is never rewritten: applyResumeEdits only replaces the
-// exact character ranges recorded here. See docs/tailored-resumes.md.
+// Everything outside the edited parts (the header, existing entry headings,
+// dates, unedited sections) is never rewritten: applyResumeEdits only
+// replaces the exact character ranges recorded here. New entries and
+// sections are built by copying an existing one as a template, so they're
+// formatted exactly like the rest of the file. See docs/tailored-resumes.md.
 
 type Span = { start: number; end: number };
 
@@ -33,11 +35,15 @@ export type Bullet = Span & {
   text: string;
 };
 
-export type ResumeEntry = {
+// An entry's whole block runs from \resumeSubheading to the end of its
+// bullet list (or of its heading, if it has no list): `start`..`end`.
+export type ResumeEntry = Span & {
   id: string;
   // The four \resumeSubheading arguments as plain text, e.g.
   // [title, dates, organization, location].
   heading: [string, string, string, string];
+  // Where each heading argument's {group} is, for templating new entries.
+  headingGroups: [Group, Group, Group, Group];
   bullets: Bullet[];
   // Written before new bullets' text, e.g. "\textbullet\ ", copied from the
   // entry's first bullet so new ones look like the rest.
@@ -53,7 +59,13 @@ export type SkillCategory = Span & {
   items: SkillItem[];
 };
 
-export type ResumeSection = { title: string; entries: ResumeEntry[] };
+// A section with entries runs from \section to the next section (or
+// \end{document}): `start`..`end`.
+export type ResumeSection = Span & {
+  title: string;
+  titleGroup: Group;
+  entries: ResumeEntry[];
+};
 
 export type ParsedResumeLatex = {
   summary: (Span & { text: string }) | null;
@@ -85,7 +97,15 @@ export function parseResumeLatex(tex: string): LatexResult<{ resume: ParsedResum
     } else {
       const entries = parseEntries(tex, section, entryCount);
       entryCount += entries.length;
-      if (entries.length > 0) resume.sections.push({ title: section.title, entries });
+      if (entries.length > 0) {
+        resume.sections.push({
+          title: section.title,
+          titleGroup: section.titleGroup,
+          start: section.start,
+          end: section.end,
+          entries,
+        });
+      }
     }
   }
 
@@ -96,7 +116,7 @@ export function parseResumeLatex(tex: string): LatexResult<{ resume: ParsedResum
   return { ok: true, resume };
 }
 
-type SectionBounds = { title: string; bodyStart: number; end: number };
+type SectionBounds = Span & { title: string; titleGroup: Group; bodyStart: number };
 
 function findSections(tex: string, from: number, to: number): SectionBounds[] {
   const starts = findAllCommands(tex, "section", from, to);
@@ -108,6 +128,8 @@ function findSections(tex: string, from: number, to: number): SectionBounds[] {
     if (!titleGroup) continue;
     sections.push({
       title: latexToPlain(contentOf(tex, titleGroup)),
+      titleGroup,
+      start,
       bodyStart: titleGroup.end,
       end: starts[index + 1] ?? to,
     });
@@ -196,6 +218,7 @@ function splitTopLevelCommas(list: string): string[] {
 }
 
 const BULLET_PREFIX = /^\s*\\textbullet\\ /;
+const LIST_END = "\\resumeSubHeadingListEnd";
 
 function parseEntries(tex: string, section: SectionBounds, idOffset: number): ResumeEntry[] {
   const entries: ResumeEntry[] = [];
@@ -213,7 +236,8 @@ function parseEntries(tex: string, section: SectionBounds, idOffset: number): Re
       groups.push(group);
       cursor = group.end;
     }
-    if (groups.length < 4) {
+    const [g0, g1, g2, g3] = groups;
+    if (!g0 || !g1 || !g2 || !g3) {
       position = cursor;
       continue;
     }
@@ -221,6 +245,7 @@ function parseEntries(tex: string, section: SectionBounds, idOffset: number): Re
     const id = `e${idOffset + entries.length + 1}`;
     const bullets: Bullet[] = [];
     let bulletPrefix = "";
+    let end = g3.end;
 
     // A nested \resumeSubHeadingList right after the heading holds the
     // entry's bullets.
@@ -244,13 +269,21 @@ function parseEntries(tex: string, section: SectionBounds, idOffset: number): Re
           text: latexToPlain(raw.slice(prefix.length)),
         });
       }
-      cursor = bulletsEnd === section.end ? bulletsEnd : bulletsEnd + 1;
+      end = listEnd === -1 ? section.end : listEnd + LIST_END.length;
+      cursor = end;
     }
 
-    const heading = groups.map((group) => latexToPlain(contentOf(tex, group)));
     entries.push({
       id,
-      heading: [heading[0], heading[1], heading[2], heading[3]],
+      start,
+      end,
+      heading: [
+        latexToPlain(contentOf(tex, g0)),
+        latexToPlain(contentOf(tex, g1)),
+        latexToPlain(contentOf(tex, g2)),
+        latexToPlain(contentOf(tex, g3)),
+      ],
+      headingGroups: [g0, g1, g2, g3],
       bullets,
       bulletPrefix,
     });
@@ -261,11 +294,27 @@ function parseEntries(tex: string, section: SectionBounds, idOffset: number): Re
 
 type Replacement = Span & { text: string };
 
+// Replaces ranges of `text` (positions relative to it), applied from the
+// end backwards so earlier positions stay valid.
+function replaceAll(text: string, replacements: Replacement[]): string {
+  let result = text;
+  for (const { start, end, text: value } of [...replacements].sort((a, b) => b.start - a.start)) {
+    result = result.slice(0, start) + value + result.slice(end);
+  }
+  return result;
+}
+
+// The bullet lines for an entry. Bullets whose text matches an original
+// keep their original LaTeX; new or reworded text is escaped.
+function bulletLines(source: ResumeEntry, bullets: readonly string[], prefix: string): string[] {
+  const rawByText = new Map(source.bullets.map((bullet) => [bullet.text, bullet.raw]));
+  return bullets.map((text) => `\\resumeItem{${rawByText.get(text) ?? prefix + plainToLatex(text)}}`);
+}
+
 // Applies plain-text edits to the LaTeX source. Items whose text is
 // unchanged are written back from their original LaTeX, so their exact
 // formatting survives; new or reworded text is escaped with plainToLatex.
-// Only the summary, skills block, and edited entries' bullet lists change;
-// every other character of the file is kept.
+// Only the edited parts change; every other character of the file is kept.
 export function applyResumeEdits(tex: string, edits: ResumeEdits): LatexResult<{ tex: string }> {
   const parsed = parseResumeLatex(tex);
   if (!parsed.ok) return parsed;
@@ -301,33 +350,186 @@ export function applyResumeEdits(tex: string, edits: ResumeEdits): LatexResult<{
     });
   }
 
-  const entries = new Map(resume.sections.flatMap((section) => section.entries.map((e) => [e.id, e])));
-  const editedEntries = new Set<string>();
-  for (const { entryId, bullets } of edits.entries ?? []) {
+  const allEntries = resume.sections.flatMap((section) => section.entries);
+  const entries = new Map(allEntries.map((entry) => [entry.id, entry]));
+  // Each existing entry can be touched by at most one edit.
+  const usedEntries = new Set<string>();
+  const claim = (entryId: string): LatexResult<{ entry: ResumeEntry }> => {
     const entry = entries.get(entryId);
     if (!entry) return { ok: false, message: `Unknown entry "${entryId}".` };
-    if (editedEntries.has(entryId)) return { ok: false, message: `Entry "${entryId}" is edited twice.` };
-    editedEntries.add(entryId);
+    if (usedEntries.has(entryId)) return { ok: false, message: `Entry "${entryId}" is edited twice.` };
+    usedEntries.add(entryId);
+    return { ok: true, entry };
+  };
+
+  // Bullet-only edits on entries that stay where they are.
+  for (const { entryId, bullets } of edits.entries ?? []) {
+    const claimed = claim(entryId);
+    if (!claimed.ok) return claimed;
+    const { entry } = claimed;
 
     const first = entry.bullets[0];
     const last = entry.bullets[entry.bullets.length - 1];
     if (!first || !last) return { ok: false, message: `Entry "${entryId}" has no bullet list to edit.` };
-
-    const rawByText = new Map(entry.bullets.map((bullet) => [bullet.text, bullet.raw]));
-    const lines = bullets.map(
-      (text) => `\\resumeItem{${rawByText.get(text) ?? entry.bulletPrefix + plainToLatex(text)}}`,
-    );
     replacements.push({
       start: first.start,
       end: last.end,
-      text: lines.join(eol + indentationAt(tex, first.start)),
+      text: bulletLines(entry, bullets, entry.bulletPrefix).join(eol + indentationAt(tex, first.start)),
     });
   }
 
-  // Apply from the end of the file backwards, so earlier offsets stay valid.
-  let result = tex;
-  for (const { start, end, text } of replacements.sort((a, b) => b.start - a.start)) {
-    result = result.slice(0, start) + text + result.slice(end);
+  // Section edits: which entries a section holds, in what order, including
+  // new entries from the profile, and whole new sections.
+  if (edits.sections && edits.sections.length > 0) {
+    // New entries and sections copy an existing one as a template, so they
+    // look exactly like the rest of the file.
+    const sampleEntry = allEntries.find((entry) => entry.bullets.length > 0) ?? allEntries[0];
+    const sampleSection = resume.sections[0];
+    if (!sampleEntry || !sampleSection) {
+      return { ok: false, message: "This resume has no entries to use as a template." };
+    }
+
+    const buildEntry = (edit: EntryEdit): LatexResult<{ text: string }> => {
+      if ("entryId" in edit) {
+        const claimed = claim(edit.entryId);
+        if (!claimed.ok) return claimed;
+        const { entry } = claimed;
+        const block = tex.slice(entry.start, entry.end);
+        if (edit.bullets === undefined) return { ok: true, text: block };
+
+        const first = entry.bullets[0];
+        const last = entry.bullets[entry.bullets.length - 1];
+        if (!first || !last) {
+          return edit.bullets.length === 0
+            ? { ok: true, text: block }
+            : { ok: false, message: `Entry "${edit.entryId}" has no bullet list to edit.` };
+        }
+        const lines = bulletLines(entry, edit.bullets, entry.bulletPrefix);
+        return {
+          ok: true,
+          text: replaceAll(block, [
+            {
+              start: first.start - entry.start,
+              end: last.end - entry.start,
+              text: lines.join(eol + indentationAt(tex, first.start)),
+            },
+          ]),
+        };
+      }
+      return { ok: true, text: newEntryBlock(tex, sampleEntry, edit.heading, edit.bullets, eol) };
+    };
+
+    const buildEntries = (list: readonly EntryEdit[], separator: string): LatexResult<{ text: string }> => {
+      const blocks: string[] = [];
+      for (const edit of list) {
+        const built = buildEntry(edit);
+        if (!built.ok) return built;
+        blocks.push(built.text);
+      }
+      return { ok: true, text: blocks.join(separator) };
+    };
+
+    const sectionsByTitle = new Map(resume.sections.map((section) => [section.title.toLowerCase(), section]));
+    const editedSections = new Set<string>();
+    // New sections, grouped by where they're inserted, in the order given.
+    const inserts = new Map<number, string[]>();
+
+    for (const edit of edits.sections) {
+      if ("title" in edit) {
+        const section = sectionsByTitle.get(edit.title.toLowerCase());
+        if (!section) return { ok: false, message: `Unknown section "${edit.title}".` };
+        if (editedSections.has(section.title)) {
+          return { ok: false, message: `Section "${edit.title}" is edited twice.` };
+        }
+        editedSections.add(section.title);
+
+        const first = section.entries[0];
+        const last = section.entries[section.entries.length - 1];
+        if (!first || !last) return { ok: false, message: `Section "${edit.title}" has no entries.` };
+        const built = buildEntries(edit.entries, entrySeparator(tex, section, eol));
+        if (!built.ok) return built;
+        replacements.push({ start: first.start, end: last.end, text: built.text });
+        continue;
+      }
+
+      if (sectionsByTitle.has(edit.newTitle.toLowerCase())) {
+        return { ok: false, message: `A section called "${edit.newTitle}" already exists.` };
+      }
+      let at: number;
+      if (edit.afterSection === null) {
+        const lastSection = resume.sections[resume.sections.length - 1];
+        at = lastSection ? lastSection.end : sampleSection.end;
+      } else {
+        const after = sectionsByTitle.get(edit.afterSection.toLowerCase());
+        if (!after) return { ok: false, message: `Unknown section "${edit.afterSection}".` };
+        at = after.end;
+      }
+      const built = buildEntries(edit.entries, entrySeparator(tex, sampleSection, eol));
+      if (!built.ok) return built;
+      inserts.set(at, [...(inserts.get(at) ?? []), newSectionBlock(tex, sampleSection, edit.newTitle, built.text)]);
+    }
+
+    for (const [at, blocks] of inserts) {
+      replacements.push({ start: at, end: at, text: blocks.join("") });
+    }
   }
-  return { ok: true, tex: result };
+
+  return { ok: true, tex: replaceAll(tex, replacements) };
+}
+
+// What goes between two entries in a section: copied from the section if
+// it has two entries, otherwise a line break plus the entry's indentation.
+function entrySeparator(tex: string, section: ResumeSection, eol: string): string {
+  const [first, second] = section.entries;
+  if (first && second) return tex.slice(first.end, second.start);
+  return first ? eol + indentationAt(tex, first.start) : eol;
+}
+
+// A new entry, built from an existing one as a template: same layout and
+// spacing, with the heading arguments and bullets replaced (all escaped).
+// An entry with no bullets gets no list, like an education entry.
+function newEntryBlock(
+  tex: string,
+  sample: ResumeEntry,
+  heading: readonly [string, string, string, string],
+  bullets: readonly string[],
+  eol: string,
+): string {
+  const first = sample.bullets[0];
+  const last = sample.bullets[sample.bullets.length - 1];
+  const end = bullets.length > 0 || !first ? sample.end : sample.headingGroups[3].end;
+  const block = tex.slice(sample.start, end);
+
+  const replacements: Replacement[] = sample.headingGroups.map((group, index) => ({
+    start: group.contentStart - sample.start,
+    end: group.contentEnd - sample.start,
+    text: plainToLatex(heading[index] ?? ""),
+  }));
+  if (bullets.length > 0 && first && last) {
+    const lines = bullets.map((text) => `\\resumeItem{${sample.bulletPrefix}${plainToLatex(text)}}`);
+    replacements.push({
+      start: first.start - sample.start,
+      end: last.end - sample.start,
+      text: lines.join(eol + indentationAt(tex, first.start)),
+    });
+  }
+  return replaceAll(block, replacements);
+}
+
+// A new section, built from an existing one as a template: the same
+// heading and list markup, with the title replaced and the given entries
+// inside. Includes the template's trailing spacing, so it slots in before
+// the next section like the others.
+function newSectionBlock(tex: string, sample: ResumeSection, title: string, entriesText: string): string {
+  const first = sample.entries[0];
+  const last = sample.entries[sample.entries.length - 1];
+  if (!first || !last) return "";
+  const head = replaceAll(tex.slice(sample.start, first.start), [
+    {
+      start: sample.titleGroup.contentStart - sample.start,
+      end: sample.titleGroup.contentEnd - sample.start,
+      text: plainToLatex(title),
+    },
+  ]);
+  return head + entriesText + tex.slice(last.end, sample.end);
 }

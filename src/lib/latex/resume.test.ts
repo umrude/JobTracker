@@ -220,3 +220,125 @@ describe("applyResumeEdits", () => {
     ).toBe(false);
   });
 });
+
+describe("applyResumeEdits: sections", () => {
+  const resume = parse(DEMO);
+  const projects = resume.sections[0];
+  const experience = resume.sections[1];
+
+  it("reorders and removes entries, keeping each entry's original LaTeX", () => {
+    // Experience: Copperline first, then Larkspur; the junior role removed.
+    const tex = apply(DEMO, {
+      sections: [{ title: "Experience", entries: [{ entryId: "e4" }, { entryId: "e3" }] }],
+    });
+    const after = parse(tex).sections[1];
+    expect(after.entries.map((e) => e.heading[2])).toEqual(["Copperline Media", "Larkspur Logistics"]);
+    // Unchanged entries are copied byte for byte.
+    const original = experience.entries[0];
+    expect(tex).toContain(DEMO.slice(original.start, original.end));
+    // The removed entry's LaTeX is gone (sanity check that it was there).
+    expect(DEMO).toContain("Fennel \\& Finch");
+    expect(tex).not.toContain("Fennel \\& Finch");
+  });
+
+  it("adds a new entry from the profile, formatted like the others", () => {
+    const tex = apply(DEMO, {
+      sections: [
+        {
+          title: "Notable Projects",
+          entries: [
+            { entryId: "e1" },
+            {
+              heading: ["Trail Conditions Map (Volunteer)", "2023", "Community Hiking Club Site", "Next.js, Leaflet"],
+              bullets: ["Cut page weight by 60% & lazy-loaded the map layers"],
+            },
+          ],
+        },
+      ],
+    });
+    expect(tex).toContain(
+      [
+        "  \\resumeSubheading",
+        "      {Trail Conditions Map (Volunteer)}{2023}",
+        "      {Community Hiking Club Site}{Next.js, Leaflet}",
+        "      \\resumeSubHeadingList",
+        "          \\resumeItem{\\textbullet\\ Cut page weight by 60\\% \\& lazy-loaded the map layers}",
+        "      \\resumeSubHeadingListEnd",
+      ].join("\n"),
+    );
+    const after = parse(tex).sections[0];
+    expect(after.entries.map((e) => e.heading[0])).toEqual([
+      "Dispatch Dashboard (Larkspur Logistics)",
+      "Trail Conditions Map (Volunteer)",
+    ]);
+    expect(after.entries[1].bullets.map((b) => b.text)).toEqual([
+      "Cut page weight by 60% & lazy-loaded the map layers",
+    ]);
+  });
+
+  it("edits an existing entry's bullets within a section edit", () => {
+    const tex = apply(DEMO, {
+      sections: [{ title: "Notable Projects", entries: [{ entryId: "e2", bullets: ["Reworded bullet"] }, { entryId: "e1" }] }],
+    });
+    expect(parse(tex).sections[0].entries.map((e) => e.bullets.map((b) => b.text))).toEqual([
+      ["Reworded bullet"],
+      projects.entries[0].bullets.map((b) => b.text),
+    ]);
+  });
+
+  it("adds a new section after an existing one, with the same markup", () => {
+    const tex = apply(DEMO, {
+      sections: [
+        {
+          newTitle: "Volunteering",
+          afterSection: "Experience",
+          entries: [{ heading: ["Mentor", "2024", "Code Club", "Portland, OR"], bullets: ["Taught weekly sessions"] }],
+        },
+      ],
+    });
+    const after = parse(tex);
+    expect(after.sections.map((s) => s.title)).toEqual(["Notable Projects", "Experience", "Volunteering", "Education"]);
+    expect(tex).toContain("\\section{Volunteering}\n\\resumeSubHeadingList\n  \\resumeSubheading\n      {Mentor}{2024}");
+    expect(after.sections[2].entries[0].bullets[0].text).toBe("Taught weekly sessions");
+  });
+
+  it("puts a new section last when afterSection is null", () => {
+    const tex = apply(DEMO, {
+      sections: [{ newTitle: "Awards", afterSection: null, entries: [{ heading: ["Hackathon winner", "2022", "", ""], bullets: [] }] }],
+    });
+    const after = parse(tex);
+    expect(after.sections.map((s) => s.title).at(-1)).toBe("Awards");
+    // No bullets means no list, like an education entry.
+    expect(after.sections.at(-1)?.entries[0].bullets).toEqual([]);
+    expect(tex.indexOf("\section{Awards}")).toBeLessThan(tex.indexOf("\end{document}"));
+  });
+
+  it("keeps Windows line endings in new entries", () => {
+    const tex = apply(QUIRKY, {
+      sections: [{ title: "Experience", entries: [{ entryId: "e1" }, { heading: ["New role", "2026", "Acme", "Remote"], bullets: ["Did a thing"] }] }],
+    });
+    expect(tex.replaceAll("\r\n", "")).not.toContain("\n");
+    expect(parse(tex).sections[0].entries[1].heading).toEqual(["New role", "2026", "Acme", "Remote"]);
+  });
+
+  it("rejects unknown or duplicate sections, reused entries, and clashing new titles", () => {
+    const fail = (edits: Parameters<typeof applyResumeEdits>[1]) => applyResumeEdits(DEMO, edits).ok;
+    expect(fail({ sections: [{ title: "Hobbies", entries: [{ entryId: "e1" }] }] })).toBe(false);
+    expect(
+      fail({
+        sections: [
+          { title: "Experience", entries: [{ entryId: "e3" }] },
+          { title: "experience", entries: [{ entryId: "e4" }] },
+        ],
+      }),
+    ).toBe(false);
+    // The same entry edited in two places.
+    expect(
+      fail({
+        entries: [{ entryId: "e3", bullets: ["x"] }],
+        sections: [{ title: "Experience", entries: [{ entryId: "e3" }] }],
+      }),
+    ).toBe(false);
+    expect(fail({ sections: [{ newTitle: "Experience", afterSection: null, entries: [{ entryId: "e3" }] }] })).toBe(false);
+  });
+});
