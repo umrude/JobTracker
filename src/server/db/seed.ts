@@ -268,7 +268,7 @@ You have
 
 // Fictional companies and .example URLs (RFC 2606 reserved, never resolve)
 // spread across every status so every kanban column has cards.
-const SEED_APPLICATIONS: SeedApplication[] = [
+export const SEED_APPLICATIONS: SeedApplication[] = [
   {
     company: "Cobalt Harbor",
     title: "Backend Engineer (Node.js)",

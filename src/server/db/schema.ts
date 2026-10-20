@@ -10,6 +10,7 @@ import {
   sqliteTable,
   text,
   uniqueIndex,
+  real,
 } from "drizzle-orm/sqlite-core";
 import { STATUSES } from "@/lib/schemas/status";
 import {
@@ -18,6 +19,7 @@ import {
   PROFILE_SOURCES,
 } from "@/lib/schemas/profile";
 import { COVER_LENGTHS, COVER_TONES } from "@/lib/schemas/cover-letter";
+import { EMAIL_TYPES, MATCH_METHODS, SUGGESTION_SOURCES, SUGGESTION_STATES } from "@/lib/schemas/email";
 
 // Accounts. The app is multi-user *ready*: every other table has a
 // user_id and every query filters by it, but sign-in is still limited to
@@ -253,6 +255,48 @@ export const coverLetters = sqliteTable(
   },
   (table) => [
     uniqueIndex("cover_letters_user_job_version_unique").on(table.userId, table.jobId, table.version),
+  ],
+);
+
+// Suggested status changes from Gmail sync (or the ghosted rule), waiting
+// for your review. Nothing changes an application's status until you
+// confirm a suggestion. Stores email metadata and the snippet only, never
+// the body. See docs/gmail-sync.md.
+export const emailEvents = sqliteTable(
+  "email_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: ownerColumn(),
+    source: text("source", { enum: SUGGESTION_SOURCES }).notNull(),
+    // Gmail ids; null for ghosted-rule suggestions, which have no email.
+    gmailMessageId: text("gmail_message_id"),
+    gmailThreadId: text("gmail_thread_id"),
+    fromAddress: text("from_address"),
+    fromName: text("from_name"),
+    subject: text("subject"),
+    snippet: text("snippet"),
+    receivedAt: integer("received_at", { mode: "timestamp" }),
+    // The application it's about. Null when matching couldn't tell; you
+    // pick one in review.
+    applicationId: integer("application_id").references(() => applications.id, { onDelete: "cascade" }),
+    matchMethod: text("match_method", { enum: MATCH_METHODS }),
+    // The classifier's answer (null until classified).
+    emailType: text("email_type", { enum: EMAIL_TYPES }),
+    confidence: real("confidence"),
+    reason: text("reason"),
+    proposedStatus: text("proposed_status", { enum: STATUSES }),
+    state: text("state", { enum: SUGGESTION_STATES }).notNull().default("pending"),
+    model: text("model"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    decidedAt: integer("decided_at", { mode: "timestamp" }),
+  },
+  (table) => [
+    // Each email is processed once per user. Ghosted suggestions have no
+    // message id; SQLite allows any number of nulls in a unique index.
+    uniqueIndex("email_events_user_message_unique").on(table.userId, table.gmailMessageId),
+    index("email_events_user_state_idx").on(table.userId, table.state),
   ],
 );
 
