@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { getMode } from "@/server/mode";
 import { auth, signOut } from "@/server/auth";
 import { env } from "@/server/env";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { gmailNeedsReconnect } from "@/server/db/gmail-connections";
 import { toggleDemoModeAction } from "./mode-actions";
 import { NavLinks } from "./nav-links";
 
@@ -20,6 +22,9 @@ export default async function AppLayout({
   // A public demo deployment never has a session; a cookie-toggled local
   // demo preview still runs on a live deployment, so it does.
   const session = !env.DEMO_MODE ? await auth() : null;
+  // On every page, since an expired connection quietly stops sync. Only
+  // with a session: without one, the page itself redirects to sign-in.
+  const reconnectGmail = session?.user ? await gmailNeedsReconnect() : false;
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -54,6 +59,14 @@ export default async function AppLayout({
           )}
         </div>
       </header>
+      {reconnectGmail && (
+        <div role="alert" className="flex items-center justify-between gap-3 border-b border-destructive/40 bg-destructive/5 px-6 py-2 text-sm">
+          <span className="text-destructive">Gmail sync is paused: Google ended the connection.</span>
+          <Link href="/inbox-review" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Reconnect Gmail
+          </Link>
+        </div>
+      )}
       <main className="flex flex-1 flex-col">{children}</main>
     </div>
   );

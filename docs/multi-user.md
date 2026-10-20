@@ -69,7 +69,7 @@ The order is the subtle part. Drizzle runs a migration inside a transaction, whe
 The code is ready. These are the remaining decisions, mostly not code:
 
 1. **Sign-in:** replace the `ALLOWED_EMAIL` check with open sign-up or an invite list. Claim or remove the unclaimed owner first.
-2. **Gmail (Phase 4):** `gmail.readonly` is a restricted scope. A public app needs Google's verification and an annual third-party security assessment (typically thousands of dollars a year). The biggest blocker.
+2. **Gmail (Phase 4):** `gmail.readonly` is a restricted scope. A public app needs Google's verification and an annual third-party security assessment (typically thousands of dollars a year). The biggest blocker. The code side is ready: each user has their own connection, and tokens are encrypted with the owner's id bound in, so one user's token can't be used from another's row (see docs/gmail-sync.md).
 3. **LLM costs:** comparisons and tailoring run on your Anthropic key. Add per-user quotas and rate limits, payments, or let users bring their own key.
 4. **Hosting:** the live app runs on your own machine (see Hosting in CLAUDE.md). Multiple users need an always-on server with Tectonic, backups, and probably Postgres if it ever runs on more than one instance.
 5. **Privacy:** other people's resumes and emails mean a privacy policy, account deletion and data export, and stronger security overall.

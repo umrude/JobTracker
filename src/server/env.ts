@@ -30,6 +30,22 @@ const envSchema = z.object({
   // the PATH of whatever started the server.
   TECTONIC_PATH: z.string().optional().default("tectonic"),
   DATABASE_PATH: z.string().optional().default("./data/app.db"),
+  // Encrypts stored Gmail refresh tokens: 32 random bytes, base64. Optional
+  // at startup like ANTHROPIC_API_KEY (demo mode never connects Gmail);
+  // connecting checks for it. Validated here so a malformed key fails at
+  // boot rather than halfway through connecting.
+  TOKEN_ENCRYPTION_KEY: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z
+      .string()
+      .refine((value) => Buffer.from(value, "base64").length === 32, {
+        message: "must be 32 random bytes, base64-encoded (see .env.example)",
+      })
+      .optional(),
+  ),
+  // Where the app is reached, for the Gmail OAuth redirect URI (which must
+  // match the one registered with Google exactly).
+  APP_URL: z.url().optional().default("http://localhost:3000"),
 });
 
 export type Env = z.infer<typeof envSchema>;

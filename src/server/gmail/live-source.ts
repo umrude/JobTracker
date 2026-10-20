@@ -1,0 +1,125 @@
+import "server-only";
+import { gmail, type gmail_v1 } from "@googleapis/gmail";
+import type { EmailMeta } from "@/lib/schemas/email";
+import { extractBodyText, toEmailMeta } from "@/server/gmail/parse";
+import { GmailReconnectNeeded, MAX_MESSAGES, type MailBatch, type MailSource } from "@/server/gmail/mail-source";
+import { httpStatus, isInvalidGrant, oauthClient } from "@/server/gmail/oauth";
+
+// The Gmail mail source. Read-only by construction: the token only grants
+// gmail.readonly, and this only calls list and get.
+//
+// Cost: listing is cheap (ids only); each message then needs one metadata
+// request. A few run at once, which stays well inside Gmail's per-user
+// rate limit.
+
+const CONCURRENCY = 8;
+// Not your email: what you sent, drafts, chat, spam, and trash.
+const SKIP_LABELS = new Set(["SENT", "DRAFT", "CHAT", "SPAM", "TRASH"]);
+const SKIP_QUERY = "-in:sent -in:drafts -in:chats";
+
+// Runs a Google call, turning a refused refresh token into the one error
+// sync knows how to handle.
+async function call<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (error) {
+    if (isInvalidGrant(error)) throw new GmailReconnectNeeded();
+    throw error;
+  }
+}
+
+export function liveMailSource(refreshToken: string): MailSource {
+  const auth = oauthClient();
+  // Only the refresh token: the client fetches a short-lived access token
+  // itself when the first request needs one.
+  auth.setCredentials({ refresh_token: refreshToken });
+  const api = gmail({ version: "v1", auth });
+
+  async function metadata(id: string): Promise<EmailMeta | null> {
+    try {
+      const { data } = await call(() =>
+        api.users.messages.get({ userId: "me", id, format: "metadata", metadataHeaders: ["From", "Subject"] }),
+      );
+      return toEmailMeta(data);
+    } catch (error) {
+      // Deleted between listing and reading: nothing to do.
+      if (httpStatus(error) === 404) return null;
+      throw error;
+    }
+  }
+
+  async function allMetadata(ids: string[]): Promise<EmailMeta[]> {
+    const results: EmailMeta[] = [];
+    for (let i = 0; i < ids.length; i += CONCURRENCY) {
+      const chunk = await Promise.all(ids.slice(i, i + CONCURRENCY).map(metadata));
+      for (const meta of chunk) if (meta) results.push(meta);
+    }
+    return results.sort((a, b) => b.receivedAt.getTime() - a.receivedAt.getTime());
+  }
+
+  async function batch(ids: string[], historyId: string, more: boolean): Promise<MailBatch> {
+    return {
+      messages: await allMetadata(ids.slice(0, MAX_MESSAGES)),
+      historyId,
+      truncated: more || ids.length > MAX_MESSAGES,
+    };
+  }
+
+  return {
+    async listSince(since) {
+      // The history id is read first, so anything arriving while this runs
+      // is picked up by the next sync rather than missed. (Seeing a message
+      // twice is harmless: each is processed once.)
+      const profile = await call(() => api.users.getProfile({ userId: "me" }));
+      const historyId = profile.data.historyId;
+      if (!historyId) throw new Error("Gmail didn't return a history id.");
+
+      // Gmail's "after:" takes seconds since the epoch.
+      const q = `after:${Math.floor(since.getTime() / 1000)} ${SKIP_QUERY}`;
+      const ids: string[] = [];
+      let pageToken: string | undefined;
+      do {
+        const { data }: { data: gmail_v1.Schema$ListMessagesResponse } = await call(() =>
+          api.users.messages.list({ userId: "me", q, maxResults: 500, pageToken }),
+        );
+        for (const message of data.messages ?? []) if (message.id) ids.push(message.id);
+        pageToken = data.nextPageToken ?? undefined;
+      } while (pageToken && ids.length <= MAX_MESSAGES);
+
+      return batch(ids, historyId, pageToken !== undefined);
+    },
+
+    async listNew(startHistoryId) {
+      const ids = new Set<string>();
+      let historyId = startHistoryId;
+      let pageToken: string | undefined;
+      do {
+        let data: gmail_v1.Schema$ListHistoryResponse;
+        try {
+          ({ data } = await call(() =>
+            api.users.history.list({ userId: "me", startHistoryId, historyTypes: ["messageAdded"], maxResults: 500, pageToken }),
+          ));
+        } catch (error) {
+          // Gmail no longer has history that old: fall back to listSince.
+          if (httpStatus(error) === 404) return null;
+          throw error;
+        }
+        for (const entry of data.history ?? []) {
+          for (const added of entry.messagesAdded ?? []) {
+            const message = added.message;
+            if (message?.id && !(message.labelIds ?? []).some((label) => SKIP_LABELS.has(label))) ids.add(message.id);
+          }
+        }
+        historyId = data.historyId ?? historyId;
+        pageToken = data.nextPageToken ?? undefined;
+      } while (pageToken && ids.size <= MAX_MESSAGES);
+
+      return batch([...ids], historyId, pageToken !== undefined);
+    },
+
+    async body(messageId) {
+      const { data } = await call(() => api.users.messages.get({ userId: "me", id: messageId, format: "full" }));
+      return extractBodyText(data.payload);
+    },
+  };
+}

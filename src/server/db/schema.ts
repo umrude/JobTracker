@@ -300,6 +300,35 @@ export const emailEvents = sqliteTable(
   ],
 );
 
+// A user's Gmail connection (gmail.readonly), at most one per user. Only
+// the refresh token is kept, encrypted (see token-cipher.ts); access
+// tokens are fetched fresh for each sync and never stored. Demo mode has
+// no row: it reads the demo inbox instead. See docs/gmail-sync.md.
+export const gmailConnections = sqliteTable(
+  "gmail_connections",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: ownerColumn(),
+    // The Gmail address connected, which can differ from the sign-in one.
+    email: text("email").notNull(),
+    encryptedRefreshToken: text("encrypted_refresh_token").notNull(),
+    scope: text("scope").notNull(),
+    // Set when Google refuses the refresh token (revoked, or the 7-day
+    // expiry while the Google app is in Testing): shows "Reconnect Gmail".
+    needsReconnect: integer("needs_reconnect", { mode: "boolean" }).notNull().default(false),
+    // How far back the first sync looks. Changeable until the first sync.
+    syncStartAt: integer("sync_start_at", { mode: "timestamp" }),
+    // Gmail's history id from the last sync: the next sync asks only for
+    // what changed since. Null until the first sync.
+    historyId: text("history_id"),
+    lastSyncedAt: integer("last_synced_at", { mode: "timestamp" }),
+    connectedAt: integer("connected_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [uniqueIndex("gmail_connections_user_unique").on(table.userId)],
+);
+
 // The profile: everything you've done, a superset of any one resume.
 // Tailoring draws only from it. See docs/tailored-resumes.md, "The profile".
 // One profile per user.

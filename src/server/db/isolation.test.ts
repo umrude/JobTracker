@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { beforeEach, describe, it, expect, vi } from "vitest";
@@ -20,12 +21,23 @@ const state = vi.hoisted(() => ({
 vi.mock("@/server/mode", () => ({ getMode: async () => "live" }));
 vi.mock("@/server/db/client", () => ({ getDb: () => state.db }));
 vi.mock("@/server/current-user", () => ({ requireUserId: async () => state.userId }));
+// Only what the Gmail connection needs: a token key and OAuth settings.
+vi.mock("@/server/env", () => ({
+  env: {
+    DEMO_MODE: false,
+    TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+    GOOGLE_CLIENT_ID: "test-client",
+    GOOGLE_CLIENT_SECRET: "test-secret",
+    APP_URL: "http://localhost:3000",
+  },
+}));
 
 const jobsDal = await import("@/server/db/jobs");
 const applicationsDal = await import("@/server/db/applications");
 const resumesDal = await import("@/server/db/resumes");
 const comparisonsDal = await import("@/server/db/comparisons");
 const profileDal = await import("@/server/db/profile");
+const gmailDal = await import("@/server/db/gmail-connections");
 
 const DEMO_TEX = fs.readFileSync(
   path.join(process.cwd(), "src/server/db/fixtures/demo-resume.tex"),
@@ -390,5 +402,66 @@ describe("tailored comparisons", () => {
 
     as(BOB);
     expect(await comparisonsDal.getLatestTailoredComparisonRow(tailoring.id)).toBeUndefined();
+  });
+});
+
+describe("gmail connection", () => {
+  const connect = (email: string, refreshToken: string) =>
+    gmailDal.saveGmailConnection({ email, refreshToken, scope: "https://www.googleapis.com/auth/gmail.readonly" });
+
+  it("reads, changes, and removes only your own, and stores the token encrypted", async () => {
+    as(ALICE);
+    await connect("alice@gmail.example", "alice-refresh-token");
+    const [row] = testDb.select().from(schema.gmailConnections).all();
+    expect(row.encryptedRefreshToken).not.toContain("alice-refresh-token");
+
+    as(BOB);
+    expect((await gmailDal.getGmailStatus()).kind).toBe("none");
+    expect(await gmailDal.getMailSource()).toBeNull();
+    expect(await gmailDal.chooseSyncStart(new Date("2026-09-01"))).toBe(false);
+    await gmailDal.markNeedsReconnect();
+    expect(await gmailDal.removeGmailConnection()).toBeNull();
+
+    as(ALICE);
+    expect(await gmailDal.getGmailStatus()).toMatchObject({ kind: "connected", email: "alice@gmail.example", needsReconnect: false });
+    expect(await gmailDal.gmailNeedsReconnect()).toBe(false);
+    expect(await gmailDal.getMailSource()).not.toBeNull();
+    expect(await gmailDal.removeGmailConnection()).toBe("alice-refresh-token");
+    expect((await gmailDal.getGmailStatus()).kind).toBe("none");
+  });
+
+  it("won't use a token copied into another user's row", async () => {
+    as(ALICE);
+    await connect("alice@gmail.example", "alice-refresh-token");
+    as(BOB);
+    await connect("bob@gmail.example", "bob-refresh-token");
+    const alices = testDb.select().from(schema.gmailConnections).all().find((r) => r.userId === ALICE);
+    testDb
+      .update(schema.gmailConnections)
+      .set({ encryptedRefreshToken: alices?.encryptedRefreshToken })
+      .where(eq(schema.gmailConnections.userId, BOB))
+      .run();
+
+    await expect(gmailDal.getMailSource()).rejects.toThrow(/Reconnect Gmail/);
+    expect(await gmailDal.gmailNeedsReconnect()).toBe(true);
+  });
+
+  it("keeps the sync position when reconnecting the same address, and resets it for another", async () => {
+    as(ALICE);
+    await connect("alice@gmail.example", "first");
+    expect(await gmailDal.chooseSyncStart(new Date("2026-09-01T00:00:00Z"))).toBe(true);
+    testDb.update(schema.gmailConnections).set({ historyId: "123", needsReconnect: true }).run();
+    // After the first sync, the start date is fixed.
+    expect(await gmailDal.chooseSyncStart(new Date("2026-08-01T00:00:00Z"))).toBe(false);
+
+    await connect("Alice@gmail.example", "second");
+    expect(await gmailDal.getGmailStatus()).toMatchObject({
+      needsReconnect: false,
+      synced: true,
+      syncStartAt: new Date("2026-09-01T00:00:00Z"),
+    });
+
+    await connect("other@gmail.example", "third");
+    expect(await gmailDal.getGmailStatus()).toMatchObject({ email: "other@gmail.example", synced: false, startChosen: false });
   });
 });
