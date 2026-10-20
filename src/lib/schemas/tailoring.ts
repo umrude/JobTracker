@@ -57,3 +57,31 @@ export const tailoringProposalSchema = z.object({
 });
 
 export type TailoringProposal = z.infer<typeof tailoringProposalSchema>;
+
+// What the honesty checker found and did about it (lib/tailoring/check.ts).
+// Stored with the proposal and shown as flags in review.
+export const ISSUE_KINDS = [
+  "unknown_id",
+  "learning_skill",
+  "unknown_category",
+  "moved_bullet",
+  "wrong_section",
+  "new_number",
+  "new_skill",
+  "too_long",
+  "empty_text",
+  "unbacked_skill",
+  "empty_entry",
+  "unknown_section",
+] as const;
+
+export const checkIssueSchema = z.object({
+  // The proposal item this is about, e.g. "bullet:40", "summary".
+  itemId: z.string(),
+  kinds: z.array(z.enum(ISSUE_KINDS)),
+  message: z.string(),
+  resolution: z.enum(["removed", "kept_original"]),
+});
+
+export type CheckIssue = z.infer<typeof checkIssueSchema>;
+export type IssueKind = CheckIssue["kinds"][number];

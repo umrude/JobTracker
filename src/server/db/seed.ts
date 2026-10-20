@@ -15,10 +15,19 @@ import type { Status } from "@/lib/schemas/status";
 import { DEMO_MODEL, getDemoComparison } from "@/server/llm/compare-demo";
 import { importProfileFromLatexInto, type ProfileDb } from "@/server/db/profile-store";
 import { insertComparisonWithSkills } from "@/server/db/comparison-store";
+import { insertTailoringDraft } from "@/server/db/tailoring-store";
+import { loadProfileFrom } from "@/server/db/profile-store";
+import { getDemoTailoring, resolveDemoProposal } from "@/server/llm/tailor-demo";
+import { parseResumeLatex } from "@/lib/latex/resume";
+import { createSkillResolver } from "@/lib/skills/resolver";
+import { checkProposal } from "@/lib/tailoring/check";
 import { skillKey } from "@/lib/comparison-helpers";
 import type { Experience, Proficiency } from "@/lib/schemas/profile";
 
 const UNCOMPARED_SEED_JOB_URL = "https://pebblebrookhealth.example/careers/4410";
+// Gets a tailored resume draft in the seed, so the read-only public demo
+// has one to show (with the canned proposal's deliberate checker flag).
+const TAILORED_SEED_JOB_URL = "https://careers.northwindrobotics.example/jobs/1821";
 
 // process.cwd()-relative, not import.meta.dirname: this module runs both
 // directly under tsx (pnpm db:seed) and dynamically imported inside a
@@ -489,6 +498,23 @@ function seedProfile(db: ProfileDb, userId: number, latexSource: string | null) 
     .run();
 }
 
+// A tailoring draft from the canned demo proposal, through the same
+// resolver and honesty checker the app uses.
+function seedTailoring(
+  db: ProfileDb,
+  userId: number,
+  jobId: number,
+  jobUrl: string,
+  resume: { id: number; latexSource: string },
+) {
+  const tex = parseResumeLatex(resume.latexSource);
+  if (!tex.ok) throw new Error(`Demo resume doesn't parse: ${tex.message}`);
+  const profile = loadProfileFrom(db, userId);
+  const context = { profile, tex: tex.resume, resolver: createSkillResolver(profile.skills) };
+  const checked = checkProposal(resolveDemoProposal(getDemoTailoring(jobUrl), profile, tex.resume), context);
+  insertTailoringDraft(db, userId, { jobId, resumeId: resume.id, ...checked, model: DEMO_MODEL });
+}
+
 // Reusable by both the CLI entry point below and instrumentation.ts (which
 // reseeds on every dev-server restart so the local "writable demo preview"
 // cookie toggle always starts from a clean, known state).
@@ -558,6 +584,10 @@ export function seedDemoDatabase(): number {
           model: DEMO_MODEL,
           createdAt: daysAgo(Math.max(seedJob.savedDaysAgo - 1, 0)),
         });
+    }
+
+    if (activeResume?.latexSource && seedJob.url === TAILORED_SEED_JOB_URL) {
+      seedTailoring(db, demoUser.id, job.id, seedJob.url, { id: activeResume.id, latexSource: activeResume.latexSource });
     }
   }
 

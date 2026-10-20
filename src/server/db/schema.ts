@@ -169,6 +169,49 @@ export const comparisonSkills = sqliteTable(
   ],
 );
 
+// A tailored resume for one job: what the model proposed (after the
+// honesty checker), and later what you approved. Each generation is a new
+// version per job. See docs/tailored-resumes.md, Step 5.
+export const TAILORING_STATUSES = ["draft", "approved"] as const;
+
+export const tailoredResumes = sqliteTable(
+  "tailored_resumes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: ownerColumn(),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    // The resume version (and its .tex) this was tailored from.
+    resumeId: integer("resume_id")
+      .notNull()
+      .references(() => resumes.id, { onDelete: "cascade" }),
+    // 1, 2, 3... per job.
+    version: integer("version").notNull(),
+    status: text("status", { enum: TAILORING_STATUSES }).notNull().default("draft"),
+    // The checked proposal and the checker's issues. Typed unknown on
+    // purpose, like comparisons.result: re-validated with Zod on every read.
+    proposal: text("proposal_json", { mode: "json" }).$type<unknown>().notNull(),
+    issues: text("issues_json", { mode: "json" }).$type<unknown>().notNull(),
+    // Set on approval (Step 5c): the changes you accepted, and a snapshot
+    // of the profile text they used, so later profile edits never change
+    // what was approved.
+    approved: text("approved_json", { mode: "json" }).$type<unknown>(),
+    snapshot: text("snapshot_json", { mode: "json" }).$type<unknown>(),
+    // Page count of the compiled PDF, once compiled.
+    pages: integer("pages"),
+    // The model that proposed it ("demo" for canned fixtures).
+    model: text("model").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    approvedAt: integer("approved_at", { mode: "timestamp" }),
+  },
+  (table) => [
+    uniqueIndex("tailored_resumes_user_job_version_unique").on(table.userId, table.jobId, table.version),
+  ],
+);
+
 // The profile: everything you've done, a superset of any one resume.
 // Tailoring draws only from it. See docs/tailored-resumes.md, "The profile".
 // One profile per user.

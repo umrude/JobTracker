@@ -50,6 +50,13 @@
       "when": 1792456308375,
       "tag": "0006_comparison_skills",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792460977845,
+      "tag": "0007_tailored_resumes",
+      "breakpoints": true
     }
   ]
 }

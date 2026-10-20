@@ -1,7 +1,7 @@
 import { skillHasContext } from "@/lib/profile/context";
 import type { ParsedResumeLatex } from "@/lib/latex/resume";
 import type { Profile, ProfileBullet, ProfileEntry, ProfileSkill } from "@/lib/profile/types";
-import type { TailoringProposal } from "@/lib/schemas/tailoring";
+import type { CheckIssue, IssueKind, TailoringProposal } from "@/lib/schemas/tailoring";
 import type { SkillResolver } from "@/lib/skills/resolver";
 import { numbersIn, skillKeysIn, withinLengthLimit } from "@/lib/tailoring/text-checks";
 
@@ -20,27 +20,7 @@ import { numbersIn, skillKeysIn, withinLengthLimit } from "@/lib/tailoring/text-
 // - The summary may only mention skills you have with context, and only
 //   numbers that appear somewhere in your profile.
 
-export type IssueKind =
-  | "unknown_id"
-  | "learning_skill"
-  | "unknown_category"
-  | "moved_bullet"
-  | "wrong_section"
-  | "new_number"
-  | "new_skill"
-  | "too_long"
-  | "empty_text"
-  | "unbacked_skill"
-  | "empty_entry"
-  | "unknown_section";
-
-export type CheckIssue = {
-  // The proposal item this is about, e.g. "bullet:40", "summary".
-  itemId: string;
-  kinds: IssueKind[];
-  message: string;
-  resolution: "removed" | "kept_original";
-};
+export type { CheckIssue, IssueKind };
 
 export type CheckResult = { proposal: TailoringProposal; issues: CheckIssue[] };
 

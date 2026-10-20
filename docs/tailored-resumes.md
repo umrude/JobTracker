@@ -11,7 +11,7 @@ How Phase 3 turns your resume into a version tailored to one job listing, withou
 | 4b | Profile page: view and edit | Done |
 | 4c | Skill names (aliases), comparison skill rows, "I have this" | Done |
 | 5a | Tailoring groundwork: writer extension, proposal schema, honesty checker | Done |
-| 5b | Tailoring with the LLM, storage, demo fixtures | Planned |
+| 5b | Tailoring with the LLM, storage, demo fixtures | Done |
 | 5c | Review, approve, compile | Planned |
 | 6 | Cover letters from the tailored resume | Planned |
 | 7 | The "Prepare application" page, and the tailored comparison | Planned |
@@ -466,3 +466,41 @@ New entries and sections are built by **copying an existing one as a template** 
 #### Tests
 
 The checker has a test per rule, run against Alex's real demo profile (built in memory with the actual import planner). A pipeline test runs the whole chain (proposal, checker, edits, LaTeX, re-parse) and checks the result section by section.
+
+### Step 5b: the model, storage, and demo
+
+Code: `src/server/llm/tailor.ts` (the model call), `src/lib/tailoring/prompt-context.ts` (what the model sees), `src/server/tailoring.ts` (the service), `src/server/db/tailoring-store.ts` and `tailored-resumes.ts` (storage), and `src/server/llm/tailor-demo.ts` (demo fixtures).
+
+#### What the model sees
+
+Not raw LaTeX. `describeTailoringContext` writes two plain-text views, both in profile ids:
+
+- **The current resume**: the summary, each skill category with its id (`s1 Languages: TypeScript (skill:1), ...`), and each section's entries and bullets, mapped to their profile ids the same way the import links them.
+- **The whole profile**: highlights, skills with their category, levels, and context ("no context: may be listed, never claimed"), Learning skills marked "never on the resume", and every entry with "on resume: yes/no" and its bullets.
+
+Plus the listing and, if there is one, the comparison's matched skills and gaps. The system prompt states the same rules the checker enforces (so most proposals pass first time) and how to choose: keep about as much content as now so it fits one page, most relevant first, new sections only when clearly more relevant.
+
+#### At most two model calls
+
+| First answer | What happens |
+|---|---|
+| Valid, and passes the checker | Used. One call. |
+| Valid, but flagged by the checker | One retry that shows the model its proposal and the exact issues, asking it to fix them. The retry's result is checked again and used, with any remaining flags. |
+| Malformed (bad JSON or wrong shape) | One retry with the same request. Malformed twice is an error. |
+| Refusal, cut off, or API error | An error, with no retry (see the comparison step for why). |
+
+If the retry after a flagged answer fails in any way, the **first checked proposal is kept**, flags and all: a usable proposal with flags beats an error. In every path there are at most two calls, which the tests count.
+
+#### Storage
+
+`tailored_resumes` holds one row per generation, numbered per job (v1, v2, ...): the checked proposal, the checker's issues, the model, and the resume version it was tailored from. A row starts as a **draft**. Approval in Step 5c adds the accepted changes, a snapshot of the profile text they used, and the page count. Like comparisons, the stored proposal and issues are typed `unknown` and re-validated with Zod on every read; a row that no longer validates shows as "generate again" rather than breaking the page. The issue type is a Zod schema for that reason.
+
+#### Demo fixtures
+
+Canned proposals can't use database ids, which change on every reseed, so they're written in text (skill names, entry titles, original bullet text) and `resolveDemoProposal` maps them to the current profile. They go through the same honesty checker as real proposals.
+
+- **Northwind** (strong fit) leads with the real-time dashboard and swaps in the volunteer map project for the component library. It also contains **one deliberate violation**: a rewording that adds "WebSockets" to a mentoring bullet. The checker keeps the original and flags it, so the public demo shows the check at work.
+- **Bramblewood** (accessibility) leads with the accessibility work and pulls in a profile-only bullet about running a testing and accessibility guild.
+- Other jobs get an empty proposal explaining that demo mode only has canned tailoring for some listings.
+
+The seed creates a Northwind draft through the same resolver and checker, so the read-only demo has one to show. Tests check that every fixture resolves completely against the demo profile (a stale fixture would silently shrink otherwise), and that Northwind has exactly its one expected flag.

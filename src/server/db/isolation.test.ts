@@ -295,3 +295,27 @@ describe("comparison gaps and skill rows", () => {
     ]);
   });
 });
+
+describe("tailored resumes", () => {
+  const tailoringDal = () => import("@/server/db/tailored-resumes");
+  const proposal = { summary: null, skills: [], sections: [], trimOrder: [], rationale: "" };
+
+  it("numbers versions per user and job, and only reads your own", async () => {
+    const { createTailoringDraft, getLatestTailoringRow } = await tailoringDal();
+    as(ALICE);
+    const job = await jobsDal.createSavedJob({ company: "Acme", title: "Engineer" });
+    const resume = await resumesDal.createResumeVersion("alice", null);
+    const v1 = await createTailoringDraft({ jobId: job.id, resumeId: resume.id, proposal, issues: [], model: "demo" });
+    const v2 = await createTailoringDraft({ jobId: job.id, resumeId: resume.id, proposal, issues: [], model: "demo" });
+    expect([v1.version, v2.version]).toEqual([1, 2]);
+    expect((await getLatestTailoringRow(job.id))?.version).toBe(2);
+
+    as(BOB);
+    expect(await getLatestTailoringRow(job.id)).toBeUndefined();
+    // Bob's first tailoring for his own job is his v1.
+    const bobsJob = await jobsDal.createSavedJob({ company: "Globex", title: "Dev" });
+    const bobsResume = await resumesDal.createResumeVersion("bob", null);
+    const bobs = await createTailoringDraft({ jobId: bobsJob.id, resumeId: bobsResume.id, proposal, issues: [], model: "demo" });
+    expect(bobs.version).toBe(1);
+  });
+});
