@@ -1,15 +1,22 @@
 import "server-only";
 import { getMode } from "@/server/mode";
-import { getActiveResume } from "@/server/db/resumes";
+import { getActiveResume, getResume } from "@/server/db/resumes";
 import { getJobForComparison } from "@/server/db/comparisons";
 import { loadProfile } from "@/server/db/profile";
-import { createTailoringDraft, getLatestTailoringRow } from "@/server/db/tailored-resumes";
+import { createTailoringDraft, getLatestTailoringRow, getTailoringRow, saveApproval } from "@/server/db/tailored-resumes";
+import { renderLatexPdf } from "@/server/latex/render";
+import type { CompileResult } from "@/server/latex/tectonic";
 import { getLatestComparison } from "@/server/comparisons";
 import { getLlmClient } from "@/server/llm/client";
 import { tailorResume } from "@/server/llm/tailor";
 import { getDemoTailoring, resolveDemoProposal } from "@/server/llm/tailor-demo";
 import { DEMO_MODEL } from "@/server/llm/compare-demo";
-import { parseResumeLatex } from "@/lib/latex/resume";
+import { applyResumeEdits, parseResumeLatex, type ParsedResumeLatex } from "@/lib/latex/resume";
+import type { Profile } from "@/lib/profile/types";
+import { resumeEditsSchema } from "@/lib/schemas/resume-edits";
+import type { SkillResolver } from "@/lib/skills/resolver";
+import { buildApproval, trimApproval, type Approval } from "@/lib/tailoring/approve";
+import { currentAsProposal, listChanges, type ReviewChange } from "@/lib/tailoring/changes";
 import type { LlmError } from "@/lib/llm-result";
 import { createSkillResolver } from "@/lib/skills/resolver";
 import { checkIssueSchema, tailoringProposalSchema, type CheckIssue, type TailoringProposal } from "@/lib/schemas/tailoring";
@@ -114,4 +121,147 @@ export async function getLatestTailoring(jobId: number): Promise<StoredTailoring
     pages: row.pages,
     createdAt: row.createdAt,
   };
+}
+
+// ---- Review, approval, and the PDF (Step 5c) ----
+
+type TailoringContext =
+  | { ok: false; message: string }
+  | { ok: true; latexSource: string; tex: ParsedResumeLatex; profile: Profile; resolver: SkillResolver };
+
+// Everything needed to review or approve a tailoring: the resume version
+// it was made from (not necessarily the active one), its parsed .tex, and
+// your current profile.
+async function loadTailoringContext(resumeId: number): Promise<TailoringContext> {
+  const resume = await getResume(resumeId);
+  if (!resume?.latexSource) {
+    return { ok: false, message: "The resume this was tailored from no longer has its .tex." };
+  }
+  const tex = parseResumeLatex(resume.latexSource);
+  if (!tex.ok) return { ok: false, message: tex.message };
+  const profile = await loadProfile();
+  return {
+    ok: true,
+    latexSource: resume.latexSource,
+    tex: tex.resume,
+    profile,
+    resolver: createSkillResolver(profile.skills),
+  };
+}
+
+// See server/latex/render.ts for when this compiles or serves a pre-built PDF.
+const renderPdf = (tex: string): Promise<CompileResult> => renderLatexPdf(tex);
+
+export type TailoringReview = {
+  latest: StoredTailoring | null;
+  // For a draft: the changes to review, or why they can't be shown.
+  changes: ReviewChange[] | null;
+  reviewError: string | null;
+  // For an approved version: bullets suggested for removal if it runs
+  // past one page, least important first.
+  trimSuggestions: { bulletId: string; text: string }[];
+  pages: number | null;
+};
+
+export async function getTailoringReview(jobId: number): Promise<TailoringReview> {
+  const latest = await getLatestTailoring(jobId);
+  const review: TailoringReview = { latest, changes: null, reviewError: null, trimSuggestions: [], pages: null };
+  if (!latest || latest.status !== "ok") return review;
+
+  const context = await loadTailoringContext(latest.resumeId);
+  if (!context.ok) return { ...review, reviewError: context.message };
+
+  if (latest.state === "draft") {
+    const current = currentAsProposal(context.profile, context.tex, context.resolver);
+    if (!current.ok) return { ...review, reviewError: current.message };
+    return { ...review, changes: listChanges(current.proposal, latest.proposal, context.profile, context.tex) };
+  }
+
+  // Approved: trim suggestions, and the page count (worked out here for
+  // seeded rows, since the seed can't compile).
+  const row = await getTailoringRow(latest.id);
+  const final = tailoringProposalSchema.safeParse(row?.snapshot);
+  const bulletText = new Map(context.profile.entries.flatMap((e) => e.bullets.map((b) => [`bullet:${b.id}`, b.text])));
+  const trimSuggestions = final.success
+    ? final.data.trimOrder.flatMap((bulletId) => {
+        const text = bulletText.get(bulletId);
+        return text ? [{ bulletId, text }] : [];
+      })
+    : [];
+  let pages = latest.pages;
+  if (pages === null) {
+    const pdf = await renderTailoredPdf(latest.id);
+    pages = pdf.ok ? pdf.pages : null;
+  }
+  return { ...review, trimSuggestions, pages };
+}
+
+export type ApprovalResult = { ok: true; pages: number | null; warning: string | null } | { ok: false; message: string };
+
+// Saves the changes you accepted, builds the PDF, and records its page
+// count. A PDF problem doesn't undo the approval: the edits are saved and
+// the problem is reported.
+export async function approveTailoring(tailoringId: number, accepted: string[]): Promise<ApprovalResult> {
+  const row = await getTailoringRow(tailoringId);
+  if (!row) return { ok: false, message: "This tailored resume no longer exists." };
+  if (row.status !== "draft") {
+    return { ok: false, message: "This version is already approved. Generate a new one to change it." };
+  }
+  const proposed = tailoringProposalSchema.safeParse(row.proposal);
+  if (!proposed.success) return { ok: false, message: "This proposal is in an older format. Generate a new one." };
+
+  const context = await loadTailoringContext(row.resumeId);
+  if (!context.ok) return { ok: false, message: context.message };
+  const built = buildApproval({ ...context, proposed: proposed.data, accepted });
+  if (!built.ok) return { ok: false, message: built.message };
+
+  return savePdf(tailoringId, built.approval);
+}
+
+// Removes the given bullets from an approved resume to help it fit one page.
+export async function trimTailoring(tailoringId: number, bulletIds: string[]): Promise<ApprovalResult> {
+  const row = await getTailoringRow(tailoringId);
+  if (!row || row.status !== "approved") return { ok: false, message: "Only an approved version can be trimmed." };
+  const final = tailoringProposalSchema.safeParse(row.snapshot);
+  if (!final.success) return { ok: false, message: "This version is in an older format. Generate a new one." };
+
+  const context = await loadTailoringContext(row.resumeId);
+  if (!context.ok) return { ok: false, message: context.message };
+  const trimmed = trimApproval({ ...context, final: final.data, removeBulletIds: bulletIds });
+  if (!trimmed.ok) return { ok: false, message: trimmed.message };
+
+  return savePdf(tailoringId, trimmed.approval);
+}
+
+async function savePdf(tailoringId: number, approval: Approval): Promise<ApprovalResult> {
+  const pdf = await renderPdf(approval.tex);
+  const pages = pdf.ok ? pdf.pages : null;
+  const saved = await saveApproval(tailoringId, { edits: approval.edits, final: approval.final, pages });
+  if (!saved) return { ok: false, message: "This tailored resume no longer exists." };
+  return {
+    ok: true,
+    pages,
+    warning: pdf.ok ? null : `Your changes are saved, but the PDF couldn't be built: ${pdf.error.message}`,
+  };
+}
+
+// The approved PDF, rebuilt from the stored LaTeX edits and the resume
+// version's .tex (never the current profile), so it's always exactly what
+// you approved.
+export async function renderTailoredPdf(
+  tailoringId: number,
+): Promise<{ ok: true; pdf: Uint8Array; pages: number; version: number } | Extract<CompileResult, { ok: false }>> {
+  const row = await getTailoringRow(tailoringId);
+  if (!row || row.status !== "approved") {
+    return { ok: false, error: { kind: "latex_error", message: "This tailored resume isn't approved yet." } };
+  }
+  const edits = resumeEditsSchema.safeParse(row.approved);
+  const resume = await getResume(row.resumeId);
+  if (!edits.success || !resume?.latexSource) {
+    return { ok: false, error: { kind: "latex_error", message: "This version can't be rebuilt. Generate a new one." } };
+  }
+  const applied = applyResumeEdits(resume.latexSource, edits.data);
+  if (!applied.ok) return { ok: false, error: { kind: "latex_error", message: applied.message } };
+  const pdf = await renderPdf(applied.tex);
+  return pdf.ok ? { ...pdf, version: row.version } : pdf;
 }

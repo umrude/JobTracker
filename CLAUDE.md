@@ -107,6 +107,7 @@ pnpm test:e2e       # playwright (demo mode)
 pnpm db:generate    # drizzle-kit generate
 pnpm db:migrate     # apply migrations
 pnpm db:seed        # seed demo database
+pnpm demo:pdfs      # rebuild the demo's pre-built PDFs (after db:seed; needs Tectonic). Commit the result.
 ```
  
 Before saying a task is done, run `pnpm typecheck && pnpm lint && pnpm test` and fix any failures.

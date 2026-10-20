@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon, ExternalLinkIcon } from "lucide-react";
+import { ArrowLeftIcon, ExternalLinkIcon, FileTextIcon } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -103,12 +104,18 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
             )}
           </p>
         </div>
-        <RunComparisonButton
-          jobId={job.id}
-          rerun={latest !== null}
-          disabled={blocker !== undefined}
-          disabledMessage={blocker ?? ""}
-        />
+        <div className="flex items-start gap-2">
+          <Link href={`/apply/${job.id}`} className={buttonVariants({ variant: "default" })}>
+            <FileTextIcon />
+            Prepare application
+          </Link>
+          <RunComparisonButton
+            jobId={job.id}
+            rerun={latest !== null}
+            disabled={blocker !== undefined}
+            disabledMessage={blocker ?? ""}
+          />
+        </div>
       </div>
 
       {!job.listingText && (

@@ -6,6 +6,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/server/db/schema";
 import { tailoredResumes } from "@/server/db/schema";
 import type { CheckIssue, TailoringProposal } from "@/lib/schemas/tailoring";
+import type { ResumeEdits } from "@/lib/schemas/resume-edits";
 
 type AppDb = BetterSQLite3Database<typeof schema>;
 
@@ -49,3 +50,35 @@ export function latestTailoringRow(db: AppDb, userId: number, jobId: number) {
 }
 
 export type TailoringRow = NonNullable<ReturnType<typeof latestTailoringRow>>;
+
+export function tailoringRowById(db: AppDb, userId: number, id: number) {
+  return db
+    .select()
+    .from(tailoredResumes)
+    .where(and(eq(tailoredResumes.id, id), eq(tailoredResumes.userId, userId)))
+    .get();
+}
+
+// Marks a tailoring approved with the LaTeX edits you approved (what the
+// PDF is always rebuilt from) and the final resume in profile ids (for
+// trimming). Also used to save a trim, which replaces both.
+export function saveTailoringApproval(
+  db: AppDb,
+  userId: number,
+  id: number,
+  input: { edits: ResumeEdits; final: TailoringProposal; pages: number | null; approvedAt?: Date },
+): boolean {
+  const updated = db
+    .update(tailoredResumes)
+    .set({
+      status: "approved",
+      approved: input.edits,
+      snapshot: input.final,
+      pages: input.pages,
+      approvedAt: input.approvedAt ?? new Date(),
+    })
+    .where(and(eq(tailoredResumes.id, id), eq(tailoredResumes.userId, userId)))
+    .returning({ id: tailoredResumes.id })
+    .get();
+  return updated !== undefined;
+}

@@ -12,7 +12,7 @@ How Phase 3 turns your resume into a version tailored to one job listing, withou
 | 4c | Skill names (aliases), comparison skill rows, "I have this" | Done |
 | 5a | Tailoring groundwork: writer extension, proposal schema, honesty checker | Done |
 | 5b | Tailoring with the LLM, storage, demo fixtures | Done |
-| 5c | Review, approve, compile | Planned |
+| 5c | Review, approve, compile | Done |
 | 6 | Cover letters from the tailored resume | Planned |
 | 7 | The "Prepare application" page, and the tailored comparison | Planned |
 
@@ -504,3 +504,52 @@ Canned proposals can't use database ids, which change on every reseed, so they'r
 - Other jobs get an empty proposal explaining that demo mode only has canned tailoring for some listings.
 
 The seed creates a Northwind draft through the same resolver and checker, so the read-only demo has one to show. Tests check that every fixture resolves completely against the demo profile (a stale fixture would silently shrink otherwise), and that Northwind has exactly its one expected flag.
+
+### Step 5c: review, approve, and the PDF
+
+Code: `src/lib/tailoring/changes.ts` and `approve.ts` (the logic), the service functions in `src/server/tailoring.ts`, the page at `src/app/(dashboard)/apply/[jobId]/`, and the PDF route `src/app/api/tailored/[id]/pdf/`. The page is reached from **Prepare application** on a comparison.
+
+#### From a proposal to a list of changes
+
+The model proposes a whole resume, but you review *changes*. `currentAsProposal` expresses your current resume in the same shape as a proposal, and `listChanges` compares the two:
+
+| Change | Example |
+|---|---|
+| Summary | the rewritten summary |
+| Skills, per category | "Frontend: React, D3, visx, ..." |
+| Add an entry | an entry from your profile that isn't on the resume |
+| Remove an entry | |
+| Reorder entries, per section | |
+| Add, remove, or reword a bullet | |
+| Reorder bullets, per entry | |
+| New section | |
+
+Each change shows **Now** and **Proposed** side by side. A rewording the checker reverted isn't a change (the text is your original), so it only appears in the checker's flags.
+
+**Your resume must be fully in your profile.** If part of the .tex isn't (say you deleted an entry on the Profile page), a section edit would silently drop it. So the review refuses and asks you to re-import first, rather than risk losing it.
+
+#### Deciding
+
+Every change starts **undecided**. You accept or reject each one, and **Approve** stays disabled until each has a decision, so nothing is approved without being looked at. **Accept all** asks for confirmation, and says how many you haven't looked at yet. Reject all is there too.
+
+`applySelection` rebuilds the resume from just the accepted changes: rejected ones leave that part as it is now. Everything in the result comes from either the checked proposal or your current resume, so it's as honest as both. The tests prove the two ends exactly: **accepting everything gives exactly the proposal**, and **accepting nothing leaves the .tex byte for byte unchanged**. In between, rejecting a removal keeps the entry in its original place, and rejecting a rewording keeps your words.
+
+The accepted ids are checked against the proposal's actual changes on the server, so a crafted request can't slip in something that wasn't proposed.
+
+#### What approval stores, and why
+
+Approval stores the **LaTeX edits** (plain text plus positions in that resume version's .tex), not profile ids. A resume version's .tex never changes, so the approved PDF can always be rebuilt exactly, even after you edit or delete profile items. That's the snapshot rule from the design: past applications show exactly what was sent. The final resume in profile ids is also kept, for trimming.
+
+Approval then builds the PDF and records the page count. A PDF problem (Tectonic missing, say) doesn't undo the approval: the edits are saved and the problem is reported.
+
+#### Fitting on one page
+
+If the approved resume runs past one page, the page lists the model's `trimOrder` (bullets, least important first) as checkboxes. Pick some and the resume is rebuilt without them. Trimming works on the whole resume, including sections the approval didn't touch, but never removes an entry's last bullet, and refuses if your profile no longer has something the approval uses.
+
+#### Demo
+
+The public demo shows both states: **Northwind** as a draft to review (with the checker's "WebSockets" flag) and **Bramblewood** approved, with a PDF. The seed approves Bramblewood through the same `buildApproval` the app uses, with every change accepted. Its PDF is pre-built by `pnpm demo:pdfs`, which reads the approved edits straight from the seeded demo database, so the script and the seed can't disagree about what the demo shows. The tailored Bramblewood resume fits on one page.
+
+**Correction to Step 3: which demo compiles.** Step 3 said demo mode never compiles. That's right for the **public** demo, whose host has no TeX engine, but too strict for the **local demo preview** (the cookie toggle), which runs on your own machine where Tectonic is installed. Without this, approving anything in the local preview other than the one pre-built selection would report that the PDF couldn't be built. `renderLatexPdf` (`src/server/latex/render.ts`) is now the one place that decides: the public demo serves pre-built PDFs only; everywhere else compiles, falling back to a pre-built PDF if Tectonic isn't installed. Both PDF routes and approval use it.
+
+`pnpm demo:pdfs` skips PDFs that already exist (the name is a hash of the LaTeX, so an existing file is up to date), because every compile embeds a fresh creation date and would otherwise show as a change in git. `--force` rebuilds everything.

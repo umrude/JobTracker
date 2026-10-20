@@ -1,8 +1,6 @@
-import { getMode } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
 import { getResume } from "@/server/db/resumes";
-import { compileLatex } from "@/server/latex/compile";
-import { readDemoPdf } from "@/server/latex/demo-pdfs";
+import { renderLatexPdf } from "@/server/latex/render";
 import type { CompileErrorKind } from "@/server/latex/tectonic";
 import { idSchema } from "@/lib/schemas/form";
 
@@ -23,11 +21,9 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/resumes/[id
     return textResponse(404, "This resume version has no LaTeX source. Upload your .tex to get a PDF.");
   }
 
-  // Demo mode never compiles; it serves the pre-built PDF for this LaTeX.
-  const result =
-    (await getMode()) === "demo"
-      ? await readDemoPdf(resume.latexSource)
-      : await compileLatex(resume.latexSource);
+  // The public demo serves pre-built PDFs; everywhere else compiles (see
+  // server/latex/render.ts).
+  const result = await renderLatexPdf(resume.latexSource);
   if (!result.ok) return textResponse(STATUS_BY_ERROR[result.error.kind], result.error.message);
 
   // Copied into a fresh ArrayBuffer-backed array: Response's body type

@@ -15,7 +15,9 @@ import type { Status } from "@/lib/schemas/status";
 import { DEMO_MODEL, getDemoComparison } from "@/server/llm/compare-demo";
 import { importProfileFromLatexInto, type ProfileDb } from "@/server/db/profile-store";
 import { insertComparisonWithSkills } from "@/server/db/comparison-store";
-import { insertTailoringDraft } from "@/server/db/tailoring-store";
+import { insertTailoringDraft, saveTailoringApproval } from "@/server/db/tailoring-store";
+import { buildApproval } from "@/lib/tailoring/approve";
+import { currentAsProposal, listChanges } from "@/lib/tailoring/changes";
 import { loadProfileFrom } from "@/server/db/profile-store";
 import { getDemoTailoring, resolveDemoProposal } from "@/server/llm/tailor-demo";
 import { parseResumeLatex } from "@/lib/latex/resume";
@@ -28,6 +30,9 @@ const UNCOMPARED_SEED_JOB_URL = "https://pebblebrookhealth.example/careers/4410"
 // Gets a tailored resume draft in the seed, so the read-only public demo
 // has one to show (with the canned proposal's deliberate checker flag).
 const TAILORED_SEED_JOB_URL = "https://careers.northwindrobotics.example/jobs/1821";
+// Gets an approved tailored resume, so the demo also shows the finished
+// state: the PDF and page count.
+const APPROVED_SEED_JOB_URL = "https://bramblewoodlearning.example/jobs/a11y-07";
 
 // process.cwd()-relative, not import.meta.dirname: this module runs both
 // directly under tsx (pnpm db:seed) and dynamically imported inside a
@@ -498,6 +503,33 @@ function seedProfile(db: ProfileDb, userId: number, latexSource: string | null) 
     .run();
 }
 
+// Approves a canned demo proposal with every change accepted, through the
+// same buildApproval the app uses, so the read-only public demo shows an
+// approved tailored resume with a PDF. The page count is left for the app
+// to work out from the pre-built demo PDF (the seed can't compile).
+function seedApprovedTailoring(
+  db: ProfileDb,
+  userId: number,
+  jobId: number,
+  jobUrl: string,
+  resume: { id: number; latexSource: string },
+) {
+  const tex = parseResumeLatex(resume.latexSource);
+  if (!tex.ok) throw new Error(`Demo resume does not parse: ${tex.message}`);
+  const profile = loadProfileFrom(db, userId);
+  const resolver = createSkillResolver(profile.skills);
+  const context = { profile, tex: tex.resume, resolver };
+  const checked = checkProposal(resolveDemoProposal(getDemoTailoring(jobUrl), profile, tex.resume), context);
+  const draft = insertTailoringDraft(db, userId, { jobId, resumeId: resume.id, ...checked, model: DEMO_MODEL });
+
+  const current = currentAsProposal(profile, tex.resume, resolver);
+  if (!current.ok) throw new Error(`Demo profile is missing part of the resume: ${current.message}`);
+  const accepted = listChanges(current.proposal, checked.proposal, profile, tex.resume).map((change) => change.id);
+  const built = buildApproval({ ...context, proposed: checked.proposal, accepted, latexSource: resume.latexSource });
+  if (!built.ok) throw new Error(`Demo approval failed: ${built.message}`);
+  saveTailoringApproval(db, userId, draft.id, { edits: built.approval.edits, final: built.approval.final, pages: null });
+}
+
 // A tailoring draft from the canned demo proposal, through the same
 // resolver and honesty checker the app uses.
 function seedTailoring(
@@ -586,6 +618,9 @@ export function seedDemoDatabase(): number {
         });
     }
 
+    if (activeResume?.latexSource && seedJob.url === APPROVED_SEED_JOB_URL) {
+      seedApprovedTailoring(db, demoUser.id, job.id, seedJob.url, { id: activeResume.id, latexSource: activeResume.latexSource });
+    }
     if (activeResume?.latexSource && seedJob.url === TAILORED_SEED_JOB_URL) {
       seedTailoring(db, demoUser.id, job.id, seedJob.url, { id: activeResume.id, latexSource: activeResume.latexSource });
     }
