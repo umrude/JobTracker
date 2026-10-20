@@ -25,6 +25,9 @@ const envSchema = z.object({
     z.string().optional(),
   ),
   ANTHROPIC_MODEL: z.string().optional().default("claude-opus-5-5"),
+  // Email classification: short, simple, and many per sync, so the fast,
+  // low-cost model. `pnpm eval:classifier` measures it (docs/gmail-sync.md).
+  ANTHROPIC_CLASSIFIER_MODEL: z.string().optional().default("claude-haiku-5-5"),
   // The Tectonic executable for compiling LaTeX resumes (live mode only).
   // "tectonic" works when it's on PATH; a full path avoids depending on
   // the PATH of whatever started the server.

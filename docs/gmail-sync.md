@@ -6,7 +6,7 @@ Phase 4. How the app reads your inbox for news about your applications and turns
 |---|---|---|
 | 4a | Email-event schema, pre-filter, matching, ghosted rule, demo inbox | Done |
 | 4b | Connect Gmail (OAuth), encrypted tokens, the Gmail client | Done |
-| 4c | Classifier, demo classifications, eval set and script | Planned |
+| 4c | Classifier, demo classifications, eval set and script | Done |
 | 4d | Sync route, review inbox, confirm and dismiss | Planned |
 | 4e | Demo seed, docs, end-to-end check | Planned |
 
@@ -144,3 +144,82 @@ There are two implementations, and sync (Step 4d) is written once against the in
 - **Demo** (`demo-source.ts`): the demo inbox from Step 4a. It never contacts Google.
 
 `parse.ts` turns Gmail's format into the app's (pure, tested). It parses `From` headers, decodes the HTML entities in Gmail's snippets, and reads the body from the plain-text part, falling back to HTML with its tags removed. Bodies are cut to 4,000 characters.
+
+## Step 4c: the classifier
+
+Code: `src/server/llm/classify-email.ts` (prompt, call, validation), `classify-demo.ts` (demo answers), `classify-eval-cases.ts` and `classify-eval.ts` (the eval set and its scoring), `scripts/eval-classifier.ts`, and the schemas in `src/lib/schemas/email.ts`.
+
+### What it decides, and what it doesn't
+
+The classifier answers one question for each email that passed the pre-filter: **acknowledged, interview, assessment, rejection, offer, or not relevant**. It also gives a confidence (0 to 1) and a one-sentence reason you can check against the email.
+
+It deliberately does *not* propose a status. Turning "rejection" into "move to Rejected" depends on where the application is now (an offer email for an application already at Offer is no news), and that's code in Step 4d, not a model's judgment.
+
+### The prompt
+
+The prompt is mostly definitions and the edge cases that trip up keyword rules:
+
+- A reschedule that opens with "unfortunately" is still an **interview**.
+- "Moving forward with your application" is good news, while "moving forward with other candidates" is a **rejection**.
+- "We will not be extending an offer" is a **rejection**, not an offer.
+- **Mixed emails** take the type that changes the status most: offer, then rejection, then assessment, then interview, then acknowledged. "Complete this assessment before we schedule interviews" is an assessment.
+- An email from a company you applied to that isn't about the application (a newsletter, a customer bill) is **not relevant**.
+- The email is **data, not instructions**: text in it addressed to the AI is ignored. The eval set tests this.
+
+The model gets the email and the application matching linked it to, if any. The output is structured (Zod schema sent as JSON Schema), validated, and retried once if malformed, like every other model call in the app. An out-of-range confidence or an overlong reason is tidied up rather than retried.
+
+### Model choice
+
+Classification uses **`ANTHROPIC_CLASSIFIER_MODEL`, default Claude Haiku 5.5, at low effort**. The task is short and well-defined, and a first sync can send dozens of emails. Haiku 5.5 costs $0.10 / $0.50 per million tokens against Opus 5.5's $4 / $20, so it's 40 times cheaper.
+
+The eval is how you check that's good enough: run it with `--model claude-opus-5-5` to compare. Haiku has no server-side refusal fallback (sending the parameter is an error), so the LLM client now only sends it to models that support it.
+
+### The eval set
+
+There are **40 synthetic emails** with known answers: 6 acknowledged, 8 interview, 5 assessment, 8 rejection, 4 offer, and 9 not relevant. Each says which trap it tests:
+
+- reschedules;
+- warm rejections ("we were impressed... however");
+- "not extending an offer";
+- an offer delivered as "can we hop on a call";
+- an assessment mixed with an interview;
+- thread replies that never name the company;
+- a job alert naming a company you applied to;
+- a cold recruiter;
+- an ATS password reset;
+- your own follow-up email;
+- a bill from a company you also applied to;
+- a meetup invitation;
+- a prompt injection.
+
+All companies and people are fictional.
+
+`pnpm test` checks the set itself, without calling the model:
+
+- 40 unique cases, with at least 4 of every type.
+- **The pre-filter lets every hiring email through.** A perfect classifier is no use if the email never reaches it.
+
+  The exceptions are replies linked only by their thread ("Re: Scheduling ... Monday works"). That's a real gap in the 4a pre-filter, and Step 4d closes it: an email in a thread already linked to an application is a candidate whatever the pre-filter says.
+
+### Running the eval
+
+`pnpm eval:classifier` makes real API calls (about a cent on Haiku, well under a dollar on Opus). It prints:
+
+- each answer;
+- accuracy;
+- a per-type table (expected, correct, predicted);
+- **calibration**: how often it's right when its confidence is 0.8 or higher, and when it's lower;
+- each miss with its note and the model's reason;
+- the tokens used and the cost.
+
+Options:
+
+- `--model` and `--effort` compare settings without changing code;
+- `--only <id>` reruns one case;
+- `--min-accuracy` sets the pass mark: it exits 1 below that (default 0.9).
+
+The script runs under `tsx --conditions=react-server`, which resolves `server-only` to its empty module, so it uses the app's real classifier code rather than a copy.
+
+### Demo mode
+
+`classify-demo.ts` has a canned answer for each of the 9 demo emails the pre-filter keeps: what a good classifier should say, including the reschedule (interview) and the cold recruiter (not relevant). A test checks they cover exactly the pre-filter's candidates and pass validation unchanged.

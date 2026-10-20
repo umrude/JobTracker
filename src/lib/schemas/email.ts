@@ -50,3 +50,28 @@ export type SuggestionState = (typeof SUGGESTION_STATES)[number];
 // How an email was linked to an application (see lib/email/matching.ts).
 export const MATCH_METHODS = ["thread", "company", "company_title", "manual"] as const;
 export type MatchMethod = (typeof MATCH_METHODS)[number];
+
+// The classifier's answer. Two schemas, as in comparison.ts: the output
+// schema is sent to the model (structured outputs), so its guidance is in
+// .describe() text; classificationSchema validates and tidies the result.
+// A wrong type fails (and retries); an out-of-range confidence or an
+// overlong reason is cleaned up instead.
+export const classificationOutputSchema = z.object({
+  type: emailTypeSchema.describe("What the email is about, per the definitions."),
+  confidence: z
+    .number()
+    .describe("How sure you are, from 0 to 1. Use below 0.6 when the email is ambiguous."),
+  reason: z
+    .string()
+    .describe("One short sentence on why, for the person reviewing. Under 25 words. No personal details."),
+});
+
+const MAX_REASON_CHARS = 200;
+
+export const classificationSchema = classificationOutputSchema.transform((raw) => ({
+  type: raw.type,
+  confidence: Number.isFinite(raw.confidence) ? Math.min(1, Math.max(0, raw.confidence)) : 0,
+  reason: raw.reason.trim().replace(/\s+/g, " ").slice(0, MAX_REASON_CHARS),
+}));
+
+export type Classification = z.output<typeof classificationSchema>;

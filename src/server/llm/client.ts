@@ -19,6 +19,9 @@ export type StructuredRequest = {
   // zodOutputFormat throws.
   schema: z.ZodType;
   maxTokens: number;
+  // How hard the model thinks. Defaults to "medium"; simple, high-volume
+  // tasks (email classification) use "low".
+  effort?: "low" | "medium" | "high";
 };
 
 export type StructuredResponse = {
@@ -30,6 +33,8 @@ export type StructuredResponse = {
   // The model that actually answered, which can differ from the requested
   // one if a refusal fallback ran. Stored with each saved result.
   model: string;
+  // Tokens billed for the call, for the eval script's cost report.
+  usage?: { inputTokens: number; outputTokens: number };
 };
 
 export interface LlmClient {
@@ -41,15 +46,20 @@ export interface LlmClient {
 // Returns a missing_api_key error instead of throwing, so the UI can show
 // a clear message. Only live mode calls this; demo mode never builds a
 // client at all.
-export function getLlmClient(): LlmResult<LlmClient> {
+// The model defaults to ANTHROPIC_MODEL; the email classifier passes its
+// own (ANTHROPIC_CLASSIFIER_MODEL).
+export function getLlmClient(model: string = env.ANTHROPIC_MODEL): LlmResult<LlmClient> {
   if (!env.ANTHROPIC_API_KEY) return llmError("missing_api_key");
   return {
     ok: true,
-    data: createAnthropicClient(
-      new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }),
-      env.ANTHROPIC_MODEL,
-    ),
+    data: createAnthropicClient(new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }), model),
   };
+}
+
+// Server-side refusal fallback isn't available on every model: Haiku
+// has none, and sending the parameter to it is a 400.
+export function supportsServerFallback(model: string): boolean {
+  return !model.startsWith("claude-haiku");
 }
 
 export function createAnthropicClient(sdk: Anthropic, model: string): LlmClient {
@@ -65,12 +75,13 @@ export function createAnthropicClient(sdk: Anthropic, model: string): LlmClient 
             format: zodOutputFormat(request.schema),
             // Opus 5.5 defaults to "medium"; set explicitly so a model
             // change doesn't silently change cost or quality.
-            effort: "medium",
+            effort: request.effort ?? "medium",
           },
           // If a safety classifier declines, the API re-runs the request
           // on a fallback model it picks, inside the same call.
-          betas: ["server-side-fallback-2026-07-01"],
-          fallbacks: "default",
+          ...(supportsServerFallback(model)
+            ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
+            : {}),
         });
 
         const text = response.content
@@ -78,7 +89,12 @@ export function createAnthropicClient(sdk: Anthropic, model: string): LlmClient 
           .join("");
         return {
           ok: true,
-          data: { stopReason: response.stop_reason, text, model: response.model },
+          data: {
+            stopReason: response.stop_reason,
+            text,
+            model: response.model,
+            usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+          },
         };
       } catch (error) {
         return llmError("api_error", apiErrorMessage(error));
