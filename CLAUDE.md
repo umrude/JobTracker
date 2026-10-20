@@ -1,6 +1,6 @@
 # Job Application Tracker
  
-A single-user web app for tracking job applications. Portfolio project, so code quality, tests, and a clear README matter as much as features.
+A web app for tracking job applications. Portfolio project, so code quality, tests, and a clear README matter as much as features. It's **multi-user ready**: every row has an owner and every query is scoped to the current user, but sign-in is still limited to one allowed email (see `docs/multi-user.md`).
  
 ## What it does
  
@@ -43,6 +43,15 @@ src/
 - Gmail and LLM modules must have a demo path: fixture emails instead of calling Google, canned results instead of calling Anthropic. Demo mode must never make external API calls.
 - **Every Server Action or route handler that writes must call `assertWritable()` first.** Read-only is enforced on the server, not just by disabling buttons.
 - Every new feature ships with seed data and a demo path in the same PR.
+### Users and data ownership
+- Every table has a `user_id` (`ownerColumn()` in `schema.ts`), including child tables. New tables get one too.
+- **Every query filters by `user_id`**: reads, updates, and deletes, not just lists. Inserts set it. SQLite has no row-level security, so a missing filter leaks or changes another user's data.
+- The user id comes only from `requireUserId()` (`src/server/current-user.ts`), called inside the data layer. Never accept it from a form, URL, or caller argument. Exception: the `*-store.ts` modules take it explicitly, because the seed and tests use them with their own connection; the app reaches them only through wrappers that pass `requireUserId()`.
+- Demo mode always acts as the seeded demo user (`DEMO_USER_EMAIL`), for both the public demo and the local preview.
+- Uniqueness rules are per user (e.g. one active resume *per user*), as composite indexes that start with `user_id`.
+- New data-layer functions get a case in `src/server/db/isolation.test.ts` (two users; each must never see, change, or delete the other's rows).
+- Sign-in stays limited to `ALLOWED_EMAIL` until a deliberate decision to open it (see the checklist in `docs/multi-user.md`).
+
 ### Code conventions
 - Zod schemas live in `src/lib/schemas/`. Derive types with `z.infer`; do not hand-write duplicate types.
 - Validate all Server Action input with Zod. Validate all LLM output with Zod and handle malformed output gracefully (retry once, then fail with a clear error).
@@ -71,6 +80,7 @@ src/
 - Secrets only via environment variables, accessed through a single validated `env.ts` (Zod). `ANTHROPIC_API_KEY` is optional in demo mode and required in live mode when an LLM feature is used.
 ## Data model (overview)
  
+- **User**: email (null only for the "unclaimed owner" of pre-users data, claimed on first sign-in). Every other entity below has a user_id.
 - **Job**: company, title, url, listing text, source, savedAt. A job with no linked application is a "saved job".
 - **Application**: job, status, appliedAt, notes
 - **Resume**: parsed text (no original file), optional LaTeX source text, version, isActive, createdAt

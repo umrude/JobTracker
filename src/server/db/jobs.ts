@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, notExists, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { getMode } from "@/server/mode";
+import { requireUserId } from "@/server/current-user";
 import { applications, jobs } from "@/server/db/schema";
 import { toApplication } from "@/lib/saved-job";
 import type {
@@ -11,17 +12,23 @@ import type {
 
 // "Saved" means the job has no application row. Every query and write in
 // this file filters on that, so the Saved page can never edit or delete a
-// job that's already on the board.
+// job that's already on the board. Every query also filters on the
+// current user (requireUserId), so an id from a form can only ever reach
+// your own rows: someone else's id simply isn't found.
 const hasNoApplication = notExists(
   sql`(select 1 from ${applications} where ${applications.jobId} = ${jobs.id})`,
 );
 
+async function scope() {
+  return { db: getDb(await getMode()), userId: await requireUserId() };
+}
+
 export async function listSavedJobs() {
-  const db = getDb(await getMode());
+  const { db, userId } = await scope();
   return db
     .select()
     .from(jobs)
-    .where(hasNoApplication)
+    .where(and(eq(jobs.userId, userId), hasNoApplication))
     .orderBy(desc(jobs.savedAt))
     .all();
 }
@@ -29,19 +36,20 @@ export async function listSavedJobs() {
 export type SavedJob = Awaited<ReturnType<typeof listSavedJobs>>[number];
 
 export async function getSavedJob(id: number) {
-  const db = getDb(await getMode());
+  const { db, userId } = await scope();
   return db
     .select()
     .from(jobs)
-    .where(and(eq(jobs.id, id), hasNoApplication))
+    .where(and(eq(jobs.id, id), eq(jobs.userId, userId), hasNoApplication))
     .get();
 }
 
 export async function createSavedJob(input: CreateSavedJobInput) {
-  const db = getDb(await getMode());
+  const { db, userId } = await scope();
   return db
     .insert(jobs)
     .values({
+      userId,
       company: input.company,
       title: input.title,
       url: input.url,
@@ -57,7 +65,7 @@ export async function createSavedJob(input: CreateSavedJobInput) {
 // skips undefined values in .set(), so the `?? null` is what actually
 // clears a field.
 export async function updateSavedJob(input: UpdateSavedJobInput) {
-  const db = getDb(await getMode());
+  const { db, userId } = await scope();
   const updated = db
     .update(jobs)
     .set({
@@ -67,7 +75,7 @@ export async function updateSavedJob(input: UpdateSavedJobInput) {
       listingText: input.listingText ?? null,
       notes: input.notes ?? null,
     })
-    .where(and(eq(jobs.id, input.id), hasNoApplication))
+    .where(and(eq(jobs.id, input.id), eq(jobs.userId, userId), hasNoApplication))
     .returning()
     .get();
   if (!updated) throw new Error(`Saved job ${input.id} not found`);
@@ -75,8 +83,10 @@ export async function updateSavedJob(input: UpdateSavedJobInput) {
 }
 
 export async function deleteSavedJob(id: number) {
-  const db = getDb(await getMode());
-  db.delete(jobs).where(and(eq(jobs.id, id), hasNoApplication)).run();
+  const { db, userId } = await scope();
+  db.delete(jobs)
+    .where(and(eq(jobs.id, id), eq(jobs.userId, userId), hasNoApplication))
+    .run();
 }
 
 export type MoveToAppliedResult =
@@ -91,15 +101,19 @@ export async function moveSavedJobToApplied(
   id: number,
   now: Date,
 ): Promise<MoveToAppliedResult> {
-  const db = getDb(await getMode());
+  const { db, userId } = await scope();
   return db.transaction((tx) => {
-    const job = tx.select().from(jobs).where(eq(jobs.id, id)).get();
+    const job = tx
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, id), eq(jobs.userId, userId)))
+      .get();
     if (!job) return { ok: false, reason: "not_found" };
 
     const { count } = tx
       .select({ count: sql<number>`count(*)` })
       .from(applications)
-      .where(eq(applications.jobId, id))
+      .where(and(eq(applications.jobId, id), eq(applications.userId, userId)))
       .get() ?? { count: 0 };
 
     const result = toApplication(
@@ -110,10 +124,13 @@ export async function moveSavedJobToApplied(
 
     const application = tx
       .insert(applications)
-      .values(result.application)
+      .values({ ...result.application, userId })
       .returning()
       .get();
-    tx.update(jobs).set({ notes: null }).where(eq(jobs.id, id)).run();
+    tx.update(jobs)
+      .set({ notes: null })
+      .where(and(eq(jobs.id, id), eq(jobs.userId, userId)))
+      .run();
 
     return { ok: true, applicationId: application.id };
   });

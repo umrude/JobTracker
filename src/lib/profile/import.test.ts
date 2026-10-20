@@ -33,6 +33,7 @@ function profileAfter(plan: ImportPlan): Profile {
     const entryId = ++id;
     return {
       id: entryId,
+      userId: 1,
       section: entry.section,
       title: entry.title,
       dates: entry.dates,
@@ -44,6 +45,7 @@ function profileAfter(plan: ImportPlan): Profile {
       createdAt: now,
       bullets: entry.bullets.map((text) => ({
         id: ++id,
+        userId: 1,
         entryId,
         text,
         source: "resume",
@@ -55,6 +57,7 @@ function profileAfter(plan: ImportPlan): Profile {
   return {
     skills: plan.skills.map((skill) => ({
       id: ++id,
+      userId: 1,
       name: skill.name,
       nameKey: skill.name.toLowerCase(),
       category: skill.category,
@@ -70,6 +73,7 @@ function profileAfter(plan: ImportPlan): Profile {
     entries,
     highlights: plan.highlights.map((text) => ({
       id: ++id,
+      userId: 1,
       text,
       source: "resume",
       sourceJobId: null,

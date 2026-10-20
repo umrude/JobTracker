@@ -8,6 +8,7 @@ const PROFILE: Profile = {
   skills: [
     {
       id: 1,
+      userId: 1,
       name: "TypeScript",
       nameKey: "typescript",
       category: "Languages",
@@ -24,6 +25,7 @@ const PROFILE: Profile = {
   entries: [
     {
       id: 2,
+      userId: 1,
       section: "Experience",
       title: "Web Developer",
       dates: "2020 – 2025",
@@ -33,10 +35,10 @@ const PROFILE: Profile = {
       source: "resume",
       sortOrder: 0,
       createdAt: now,
-      bullets: [{ id: 3, entryId: 2, text: "Fixed the hardest bugs", source: "added", sortOrder: 0, createdAt: now }],
+      bullets: [{ id: 3, userId: 1, entryId: 2, text: "Fixed the hardest bugs", source: "added", sortOrder: 0, createdAt: now }],
     },
   ],
-  highlights: [{ id: 4, text: "5+ years of experience.", source: "gap", sourceJobId: 9, sortOrder: 0, createdAt: now }],
+  highlights: [{ id: 4, userId: 1, text: "5+ years of experience.", source: "gap", sourceJobId: 9, sortOrder: 0, createdAt: now }],
 };
 
 describe("toProfileItems", () => {

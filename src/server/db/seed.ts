@@ -6,11 +6,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "@/server/db/schema";
-import { DEMO_DB_PATH } from "@/server/db/paths";
+import { DEMO_DB_PATH, DEMO_USER_EMAIL } from "@/server/db/paths";
 import type { Status } from "@/lib/schemas/status";
 import { DEMO_MODEL, getDemoComparison } from "@/server/llm/compare-demo";
 import { importProfileFromLatexInto, type ProfileDb } from "@/server/db/profile-store";
@@ -368,9 +368,9 @@ const SEED_APPLICATIONS: SeedApplication[] = [
 // uses, plus extras that aren't on the resume, so tailoring has something
 // to pull in and the Profile page shows "extra" items. Fictional, like the
 // rest of the demo data.
-function seedProfile(db: ProfileDb, latexSource: string | null) {
+function seedProfile(db: ProfileDb, userId: number, latexSource: string | null) {
   if (!latexSource) return;
-  const imported = importProfileFromLatexInto(db, latexSource);
+  const imported = importProfileFromLatexInto(db, userId, latexSource);
   if (!imported.ok) throw new Error(`Demo profile import failed: ${imported.message}`);
 
   // Levels you'd set on the Profile page. Imported skills start unset.
@@ -384,7 +384,7 @@ function seedProfile(db: ProfileDb, latexSource: string | null) {
   for (const [name, proficiency, experience] of levels) {
     db.update(schema.profileSkills)
       .set({ proficiency, experience })
-      .where(eq(schema.profileSkills.nameKey, skillKey(name)))
+      .where(and(eq(schema.profileSkills.userId, userId), eq(schema.profileSkills.nameKey, skillKey(name))))
       .run();
   }
 
@@ -392,6 +392,7 @@ function seedProfile(db: ProfileDb, latexSource: string | null) {
   db.insert(schema.profileSkills)
     .values([
       {
+        userId,
         name: "Python",
         nameKey: skillKey("Python"),
         category: "Languages",
@@ -402,6 +403,7 @@ function seedProfile(db: ProfileDb, latexSource: string | null) {
         sortOrder: 100,
       },
       {
+        userId,
         name: "Leaflet",
         nameKey: skillKey("Leaflet"),
         category: "Frontend",
@@ -412,6 +414,7 @@ function seedProfile(db: ProfileDb, latexSource: string | null) {
         sortOrder: 101,
       },
       {
+        userId,
         name: "Docker",
         nameKey: skillKey("Docker"),
         category: "Tools",
@@ -427,6 +430,7 @@ function seedProfile(db: ProfileDb, latexSource: string | null) {
   const volunteer = db
     .insert(schema.profileEntries)
     .values({
+      userId,
       section: "Notable Projects",
       title: "Trail Conditions Map (Volunteer)",
       dates: "2023",
@@ -440,12 +444,14 @@ function seedProfile(db: ProfileDb, latexSource: string | null) {
   db.insert(schema.profileBullets)
     .values([
       {
+        userId,
         entryId: volunteer.id,
         text: "Built a trail conditions map that club volunteers update through a simple admin form",
         source: "added",
         sortOrder: 0,
       },
       {
+        userId,
         entryId: volunteer.id,
         text: "Cut page weight by 60% by lazy-loading the map layers",
         source: "added",
@@ -458,11 +464,12 @@ function seedProfile(db: ProfileDb, latexSource: string | null) {
   const copperline = db
     .select({ id: schema.profileEntries.id })
     .from(schema.profileEntries)
-    .where(eq(schema.profileEntries.title, "Frontend Developer"))
+    .where(and(eq(schema.profileEntries.userId, userId), eq(schema.profileEntries.title, "Frontend Developer")))
     .get();
   if (copperline) {
     db.insert(schema.profileBullets)
       .values({
+        userId,
         entryId: copperline.id,
         text: "Ran a weekly front-end guild for six engineers covering testing and accessibility",
         source: "added",
@@ -473,6 +480,7 @@ function seedProfile(db: ProfileDb, latexSource: string | null) {
 
   db.insert(schema.profileHighlights)
     .values({
+      userId,
       text: "Comfortable owning features from design handoff to production.",
       source: "added",
       sortOrder: 100,
@@ -493,12 +501,21 @@ export function seedDemoDatabase(): number {
 
   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
+  // The demo database's only user; everything below belongs to it. Demo
+  // mode always acts as this user (see requireUserId).
+  const demoUser = db
+    .insert(schema.users)
+    .values({ email: DEMO_USER_EMAIL })
+    .returning({ id: schema.users.id })
+    .get();
+
   // Two versions so the demo shows the version history; v2 is active.
   const [, activeResume] = db
     .insert(schema.resumes)
     .values([
-      { text: SEED_RESUME_V1, version: 1, isActive: false, createdAt: daysAgo(120) },
+      { userId: demoUser.id, text: SEED_RESUME_V1, version: 1, isActive: false, createdAt: daysAgo(120) },
       {
+        userId: demoUser.id,
         text: SEED_RESUME_V2,
         latexSource: fs.readFileSync(DEMO_RESUME_TEX_PATH, "utf8"),
         version: 2,
@@ -509,12 +526,13 @@ export function seedDemoDatabase(): number {
     .returning()
     .all();
 
-  seedProfile(db, activeResume?.latexSource ?? null);
+  seedProfile(db, demoUser.id, activeResume?.latexSource ?? null);
 
   for (const seedJob of SEED_SAVED_JOBS) {
     const job = db
       .insert(schema.jobs)
       .values({
+        userId: demoUser.id,
         company: seedJob.company,
         title: seedJob.title,
         url: seedJob.url,
@@ -532,6 +550,7 @@ export function seedDemoDatabase(): number {
     if (activeResume && seedJob.url !== UNCOMPARED_SEED_JOB_URL) {
       db.insert(schema.comparisons)
         .values({
+          userId: demoUser.id,
           jobId: job.id,
           resumeId: activeResume.id,
           result: getDemoComparison(seedJob.url),
@@ -546,6 +565,7 @@ export function seedDemoDatabase(): number {
     const job = db
       .insert(schema.jobs)
       .values({
+        userId: demoUser.id,
         company: seedApp.company,
         title: seedApp.title,
         url: seedApp.url,
@@ -558,6 +578,7 @@ export function seedDemoDatabase(): number {
 
     db.insert(schema.applications)
       .values({
+        userId: demoUser.id,
         jobId: job.id,
         status: seedApp.status,
         appliedAt: seedApp.appliedDaysAgo

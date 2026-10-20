@@ -1,12 +1,18 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { getMode } from "@/server/mode";
+import { requireUserId } from "@/server/current-user";
 import { comparisons, jobs, resumes } from "@/server/db/schema";
 import type { Comparison } from "@/lib/schemas/comparison";
 
+// Every query filters on the current user (requireUserId).
+async function scope() {
+  return { db: getDb(await getMode()), userId: await requireUserId() };
+}
+
 export async function getJobForComparison(id: number) {
-  const db = getDb(await getMode());
+  const { db, userId } = await scope();
   return db
     .select({
       id: jobs.id,
@@ -16,21 +22,27 @@ export async function getJobForComparison(id: number) {
       listingText: jobs.listingText,
     })
     .from(jobs)
-    .where(eq(jobs.id, id))
+    .where(and(eq(jobs.id, id), eq(jobs.userId, userId)))
     .get();
 }
 
 // Takes the validated Comparison type, so only output that passed
 // comparisonSchema can be written. Reads get `unknown` back and must
-// re-validate (see the comment on comparisons.result in schema.ts).
+// re-validate (see the comment on comparisons.result in schema.ts). The
+// job and resume ids come from owner-scoped reads in runComparison; the
+// owner is stamped here, never taken from the caller.
 export async function insertComparison(input: {
   jobId: number;
   resumeId: number;
   result: Comparison;
   model: string;
 }) {
-  const db = getDb(await getMode());
-  return db.insert(comparisons).values(input).returning({ id: comparisons.id }).get();
+  const { db, userId } = await scope();
+  return db
+    .insert(comparisons)
+    .values({ ...input, userId })
+    .returning({ id: comparisons.id })
+    .get();
 }
 
 const comparisonColumns = {
@@ -48,12 +60,12 @@ const comparisonColumns = {
 const newestFirst = [desc(comparisons.createdAt), desc(comparisons.id)];
 
 export async function getLatestComparisonRow(jobId: number) {
-  const db = getDb(await getMode());
+  const { db, userId } = await scope();
   return db
     .select(comparisonColumns)
     .from(comparisons)
     .innerJoin(resumes, eq(resumes.id, comparisons.resumeId))
-    .where(eq(comparisons.jobId, jobId))
+    .where(and(eq(comparisons.jobId, jobId), eq(comparisons.userId, userId)))
     .orderBy(...newestFirst)
     .limit(1)
     .get();
@@ -63,13 +75,14 @@ export type ComparisonRow = NonNullable<Awaited<ReturnType<typeof getLatestCompa
 
 // The latest comparison for every job that has one, for the Compare index.
 // Picking the first row per job in code keeps the query simple; with one
-// person's job list, the row count stays small.
+// user's job list, the row count stays small.
 export async function listLatestComparisonRows(): Promise<Map<number, ComparisonRow>> {
-  const db = getDb(await getMode());
+  const { db, userId } = await scope();
   const rows = db
     .select(comparisonColumns)
     .from(comparisons)
     .innerJoin(resumes, eq(resumes.id, comparisons.resumeId))
+    .where(eq(comparisons.userId, userId))
     .orderBy(...newestFirst)
     .all();
 
