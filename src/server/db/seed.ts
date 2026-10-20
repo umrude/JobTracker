@@ -17,6 +17,10 @@ import { importProfileFromLatexInto, type ProfileDb } from "@/server/db/profile-
 import { insertComparisonWithSkills } from "@/server/db/comparison-store";
 import { insertTailoringDraft, saveTailoringApproval } from "@/server/db/tailoring-store";
 import { buildApproval } from "@/lib/tailoring/approve";
+import { insertCoverLetter } from "@/server/db/cover-letter-store";
+import { getDemoCoverLetter } from "@/server/llm/cover-letter-demo";
+import { checkCoverLetter } from "@/lib/cover-letter/check";
+import { headerName, letterText, resumePlainText } from "@/lib/cover-letter/sources";
 import { currentAsProposal, listChanges } from "@/lib/tailoring/changes";
 import { loadProfileFrom } from "@/server/db/profile-store";
 import { getDemoTailoring, resolveDemoProposal } from "@/server/llm/tailor-demo";
@@ -528,6 +532,24 @@ function seedApprovedTailoring(
   const built = buildApproval({ ...context, proposed: checked.proposal, accepted, latexSource: resume.latexSource });
   if (!built.ok) throw new Error(`Demo approval failed: ${built.message}`);
   saveTailoringApproval(db, userId, draft.id, { edits: built.approval.edits, final: built.approval.final, pages: null });
+  // A cover letter written from the tailored resume, so the demo shows a
+  // complete application. Checked like a generated one.
+  const tailored = parseResumeLatex(built.approval.tex);
+  if (!tailored.ok) throw new Error(`Tailored demo resume does not parse: ${tailored.message}`);
+  const output = getDemoCoverLetter(jobUrl);
+  const listing = SEED_SAVED_JOBS.find((job) => job.url === jobUrl)?.listingText ?? "";
+  const resumeText = resumePlainText(tailored.resume);
+  const warnings = checkCoverLetter(output, { profile, resumeText, listing, resolver, length: "standard" });
+  insertCoverLetter(db, userId, {
+    jobId,
+    tailoringId: draft.id,
+    resumeId: resume.id,
+    tone: "professional",
+    length: "standard",
+    text: letterText(output, headerName(built.approval.tex)),
+    warnings,
+    model: DEMO_MODEL,
+  });
 }
 
 // A tailoring draft from the canned demo proposal, through the same

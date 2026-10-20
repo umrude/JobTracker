@@ -13,7 +13,7 @@ How Phase 3 turns your resume into a version tailored to one job listing, withou
 | 5a | Tailoring groundwork: writer extension, proposal schema, honesty checker | Done |
 | 5b | Tailoring with the LLM, storage, demo fixtures | Done |
 | 5c | Review, approve, compile | Done |
-| 6 | Cover letters from the tailored resume | Planned |
+| 6 | Cover letters from the tailored resume (see [cover-letters.md](cover-letters.md)) | Done |
 | 7 | The "Prepare application" page, and the tailored comparison | Planned |
 
 ## The flow

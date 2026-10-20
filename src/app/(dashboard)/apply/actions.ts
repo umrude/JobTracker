@@ -5,8 +5,10 @@ import { z } from "zod";
 import { assertWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
 import { approveTailoring, runTailoring, trimTailoring } from "@/server/tailoring";
+import { generateCoverLetter, updateCoverLetter } from "@/server/cover-letters";
 import { idSchema } from "@/lib/schemas/form";
-import { formError, type FormState, type MessageState } from "@/lib/form-state";
+import { generateCoverLetterSchema, saveCoverLetterSchema } from "@/lib/schemas/cover-letter";
+import { formError, validationError, type FormState, type MessageState } from "@/lib/form-state";
 
 // The Prepare application page's actions. Each one: session, then
 // assertWritable() (the public demo is read-only), then Zod validation,
@@ -55,6 +57,35 @@ export async function approveTailoringAction(_prevState: MessageState, formData:
 
   revalidatePath(`/apply/${parsed.data.jobId}`);
   return { status: "success", message: result.warning ?? "Approved." };
+}
+
+// Cover letters (Step 6). Writing can take up to a minute in live mode.
+export async function generateCoverLetterAction(_prevState: FormState, formData: FormData): Promise<FormState> {
+  await requireSession();
+  assertWritable();
+
+  const parsed = generateCoverLetterSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return formError("Choose a tone and length.");
+
+  const result = await generateCoverLetter(parsed.data.jobId, { tone: parsed.data.tone, length: parsed.data.length });
+  if (!result.ok) return formError(result.error.message);
+
+  revalidatePath(`/apply/${parsed.data.jobId}`);
+  return { status: "success" };
+}
+
+export async function saveCoverLetterAction(_prevState: FormState, formData: FormData): Promise<FormState> {
+  await requireSession();
+  assertWritable();
+
+  const parsed = saveCoverLetterSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return validationError(parsed.error);
+
+  const saved = await updateCoverLetter(parsed.data.id, parsed.data.text);
+  if (!saved) return formError("This cover letter no longer exists.");
+
+  revalidatePath(`/apply/${parsed.data.jobId}`);
+  return { status: "success" };
 }
 
 export async function trimTailoringAction(_prevState: MessageState, formData: FormData): Promise<MessageState> {

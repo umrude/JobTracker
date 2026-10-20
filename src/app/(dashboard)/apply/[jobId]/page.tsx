@@ -11,17 +11,23 @@ import { getActiveResume } from "@/server/db/resumes";
 import { getTailoringReview, type TailoringReview } from "@/server/tailoring";
 import { idSchema } from "@/lib/schemas/form";
 import type { CheckIssue } from "@/lib/schemas/tailoring";
+import { listCoverLetters, type StoredCoverLetter } from "@/server/cover-letters";
+import { LENGTH_LABELS, TONE_LABELS } from "@/lib/cover-letter/labels";
+import { cn } from "@/lib/utils";
+import { CoverLetterOptions } from "../_components/cover-letter-options";
+import { LetterEditor } from "../_components/letter-editor";
 import { GenerateButton } from "../_components/generate-button";
 import { ReviewPanel } from "../_components/review-panel";
 import { TrimPanel } from "../_components/trim-panel";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 
-// Prepare application: a tailored resume for one job (and, in Step 6, a
-// cover letter). A Server Component: it reads the latest tailoring and its
-// changes at render time. Generating, reviewing, approving, and trimming
-// are small Client Components. See docs/tailored-resumes.md, Step 5c.
-export default async function ApplyPage({ params }: PageProps<"/apply/[jobId]">) {
+// Prepare application: a tailored resume and a cover letter for one job. A
+// Server Component: it reads the latest tailoring, its changes, and the
+// cover letter versions at render time. Generating, reviewing, approving,
+// trimming, and editing are small Client Components. See
+// docs/tailored-resumes.md (Step 5c) and docs/cover-letters.md.
+export default async function ApplyPage({ params, searchParams }: PageProps<"/apply/[jobId]">) {
   await requireSession();
 
   const parsedId = idSchema.safeParse((await params).jobId);
@@ -29,8 +35,15 @@ export default async function ApplyPage({ params }: PageProps<"/apply/[jobId]">)
   const job = await getJobForComparison(parsedId.data);
   if (!job) notFound();
 
-  const [activeResume, review] = await Promise.all([getActiveResume(), getTailoringReview(job.id)]);
+  const [activeResume, review, letters] = await Promise.all([
+    getActiveResume(),
+    getTailoringReview(job.id),
+    listCoverLetters(job.id),
+  ]);
   const writable = isWritable();
+  // Which cover letter version to show: ?letter=2, or the newest.
+  const requested = idSchema.safeParse((await searchParams).letter);
+  const letter = letters.find((l) => requested.success && l.version === requested.data) ?? letters[0];
 
   // The first reason that applies is shown on the disabled Generate button.
   const blocker = !writable
@@ -70,7 +83,96 @@ export default async function ApplyPage({ params }: PageProps<"/apply/[jobId]">)
       )}
 
       <TailoredResumeCard review={review} jobId={job.id} blocker={blocker} writable={writable} activeResumeId={activeResume?.id} />
+
+      <CoverLetterCard
+        jobId={job.id}
+        letters={letters}
+        letter={letter}
+        writable={writable}
+        // A letter doesn't need a .tex: it can be written from the parsed resume.
+        blocker={!writable ? "Disabled in demo mode" : !job.listingText ? "Add listing text to this job first" : !activeResume ? "Upload a resume first" : undefined}
+        hasApprovedTailoring={review.latest?.status === "ok" && review.latest.state === "approved"}
+      />
     </div>
+  );
+}
+
+function CoverLetterCard({
+  jobId,
+  letters,
+  letter,
+  writable,
+  blocker,
+  hasApprovedTailoring,
+}: {
+  jobId: number;
+  letters: StoredCoverLetter[];
+  letter: StoredCoverLetter | undefined;
+  writable: boolean;
+  blocker: string | undefined;
+  hasApprovedTailoring: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Cover letter</CardTitle>
+        <CardDescription>
+          {hasApprovedTailoring
+            ? "Written from your approved tailored resume, so both stress the same experience."
+            : "Written from your active resume. Approve a tailored resume first to write from that instead."}{" "}
+          Edit it freely before you send it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <CoverLetterOptions
+          jobId={jobId}
+          label={letters.length > 0 ? "Write a new version" : "Write cover letter"}
+          disabled={blocker !== undefined}
+          disabledMessage={blocker ?? ""}
+        />
+
+        {letters.length > 1 && (
+          <nav className="flex flex-wrap items-center gap-1 text-sm" aria-label="Cover letter versions">
+            <span className="mr-1 text-muted-foreground">Versions:</span>
+            {letters.map((l) => (
+              <Link
+                key={l.id}
+                href={`/apply/${jobId}?letter=${l.version}`}
+                aria-current={l.id === letter?.id ? "page" : undefined}
+                className={cn(
+                  "rounded-md px-2 py-0.5",
+                  l.id === letter?.id ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                v{l.version}
+              </Link>
+            ))}
+          </nav>
+        )}
+
+        {letter && (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Version {letter.version} · {TONE_LABELS[letter.tone]} · {LENGTH_LABELS[letter.length]} ·{" "}
+              {letter.basedOnTailoring ? "from the tailored resume" : "from your active resume"} ·{" "}
+              {letter.model === "demo" ? "demo letter" : letter.model}
+              {letter.edited && " · edited"}
+            </p>
+            {letter.warnings.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+                <p className="text-sm font-medium">Check these before sending:</p>
+                <ul className="list-disc space-y-1 pl-5 text-sm">
+                  {letter.warnings.map((warning) => (
+                    <li key={warning.message}>{warning.message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <LetterEditor key={`${letter.id}-${letter.text}`} id={letter.id} jobId={jobId} text={letter.text} disabled={!writable} />
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

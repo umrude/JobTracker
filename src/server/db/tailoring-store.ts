@@ -51,6 +51,20 @@ export function latestTailoringRow(db: AppDb, userId: number, jobId: number) {
 
 export type TailoringRow = NonNullable<ReturnType<typeof latestTailoringRow>>;
 
+// The newest approved tailoring for a job, skipping newer drafts: what a
+// cover letter is written from.
+export function latestApprovedTailoringRow(db: AppDb, userId: number, jobId: number) {
+  return db
+    .select()
+    .from(tailoredResumes)
+    .where(
+      and(eq(tailoredResumes.userId, userId), eq(tailoredResumes.jobId, jobId), eq(tailoredResumes.status, "approved")),
+    )
+    .orderBy(desc(tailoredResumes.version))
+    .limit(1)
+    .get();
+}
+
 export function tailoringRowById(db: AppDb, userId: number, id: number) {
   return db
     .select()

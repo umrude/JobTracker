@@ -17,6 +17,7 @@ import {
   PROFICIENCY_LEVELS,
   PROFILE_SOURCES,
 } from "@/lib/schemas/profile";
+import { COVER_LENGTHS, COVER_TONES } from "@/lib/schemas/cover-letter";
 
 // Accounts. The app is multi-user *ready*: every other table has a
 // user_id and every query filters by it, but sign-in is still limited to
@@ -209,6 +210,43 @@ export const tailoredResumes = sqliteTable(
   },
   (table) => [
     uniqueIndex("tailored_resumes_user_job_version_unique").on(table.userId, table.jobId, table.version),
+  ],
+);
+
+// A cover letter for one job. Each generation is a new version per job.
+// `generatedText` is the model's letter as written; `text` is the current
+// letter, which you can edit. See docs/cover-letters.md.
+export const coverLetters = sqliteTable(
+  "cover_letters",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: ownerColumn(),
+    jobId: integer("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    // The approved tailored resume it was written from, if there was one
+    // (otherwise it was written from the active resume).
+    tailoringId: integer("tailoring_id").references(() => tailoredResumes.id, { onDelete: "set null" }),
+    resumeId: integer("resume_id")
+      .notNull()
+      .references(() => resumes.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    tone: text("tone", { enum: COVER_TONES }).notNull(),
+    length: text("length", { enum: COVER_LENGTHS }).notNull(),
+    generatedText: text("generated_text").notNull(),
+    text: text("text").notNull(),
+    // The checker's warnings, re-validated with Zod on read.
+    warnings: text("warnings_json", { mode: "json" }).$type<unknown>().notNull(),
+    model: text("model").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    uniqueIndex("cover_letters_user_job_version_unique").on(table.userId, table.jobId, table.version),
   ],
 );
 

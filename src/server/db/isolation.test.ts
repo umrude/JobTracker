@@ -319,3 +319,39 @@ describe("tailored resumes", () => {
     expect(bobs.version).toBe(1);
   });
 });
+
+describe("cover letters", () => {
+  it("numbers versions per job, and only lists or edits your own", async () => {
+    const lettersDal = await import("@/server/db/cover-letters");
+    as(ALICE);
+    const job = await jobsDal.createSavedJob({ company: "Acme", title: "Engineer" });
+    const resume = await resumesDal.createResumeVersion("alice", null);
+    const letter = {
+      jobId: job.id,
+      tailoringId: null,
+      resumeId: resume.id,
+      tone: "warm" as const,
+      length: "short" as const,
+      text: "Dear Acme,",
+      warnings: [],
+      model: "demo",
+    };
+    const v1 = await lettersDal.createCoverLetter(letter);
+    const v2 = await lettersDal.createCoverLetter(letter);
+    expect([v1.version, v2.version]).toEqual([1, 2]);
+    expect(await lettersDal.saveCoverLetterText(v1.id, "Dear Acme team,")).toBe(true);
+
+    as(BOB);
+    expect(await lettersDal.listCoverLetterRows(job.id)).toEqual([]);
+    expect(await lettersDal.saveCoverLetterText(v1.id, "Hacked")).toBe(false);
+
+    as(ALICE);
+    const rows = await lettersDal.listCoverLetterRows(job.id);
+    expect(rows.map((r) => [r.version, r.text])).toEqual([
+      [2, "Dear Acme,"],
+      [1, "Dear Acme team,"],
+    ]);
+    // The generated text is kept alongside your edit.
+    expect(rows[1]?.generatedText).toBe("Dear Acme,");
+  });
+});

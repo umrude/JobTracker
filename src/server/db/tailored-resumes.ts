@@ -4,6 +4,7 @@ import { getMode } from "@/server/mode";
 import { requireUserId } from "@/server/current-user";
 import {
   insertTailoringDraft,
+  latestApprovedTailoringRow,
   latestTailoringRow,
   saveTailoringApproval,
   tailoringRowById,
@@ -34,6 +35,11 @@ export async function createTailoringDraft(input: {
 export async function getLatestTailoringRow(jobId: number) {
   const { db, userId } = await scope();
   return latestTailoringRow(db, userId, jobId);
+}
+
+export async function getLatestApprovedTailoringRow(jobId: number) {
+  const { db, userId } = await scope();
+  return latestApprovedTailoringRow(db, userId, jobId);
 }
 
 export async function getTailoringRow(id: number) {
