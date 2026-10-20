@@ -8,6 +8,8 @@ import { assertWritable, getMode } from "@/server/mode";
 import { env } from "@/server/env";
 import { requireSession } from "@/server/require-session";
 import { chooseSyncStart, removeGmailConnection } from "@/server/db/gmail-connections";
+import { confirm, dismiss, link } from "@/server/db/email-events";
+import type { DecideResult } from "@/server/db/email-event-store";
 import {
   GMAIL_CALLBACK_PATH,
   GMAIL_OAUTH_COOKIE,
@@ -73,4 +75,45 @@ export async function chooseSyncStartAction(_prev: MessageState, formData: FormD
   }
   revalidatePath("/inbox-review");
   return { status: "success", message: "Start date saved." };
+}
+
+// ---- Reviewing suggestions ----
+// Each returns a message instead of throwing, so the card can say why
+// (say, "the application has moved on since"). revalidatePath refreshes
+// the page, the board, and the nav count.
+
+const suggestionIdSchema = z.object({ id: z.coerce.number().int().positive() });
+const linkSchema = suggestionIdSchema.extend({
+  applicationId: z.coerce.number({ error: "Pick an application." }).int().positive("Pick an application."),
+});
+
+async function decide(run: () => Promise<DecideResult>, success: string): Promise<MessageState> {
+  const result = await run();
+  if (!result.ok) return { status: "error", message: result.message };
+  revalidatePath("/", "layout");
+  return { status: "success", message: success };
+}
+
+export async function confirmSuggestionAction(_prev: MessageState, formData: FormData): Promise<MessageState> {
+  await requireSession();
+  assertWritable();
+  const parsed = suggestionIdSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { status: "error", message: "Unknown suggestion." };
+  return decide(() => confirm(parsed.data.id), "Moved.");
+}
+
+export async function dismissSuggestionAction(_prev: MessageState, formData: FormData): Promise<MessageState> {
+  await requireSession();
+  assertWritable();
+  const parsed = suggestionIdSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { status: "error", message: "Unknown suggestion." };
+  return decide(() => dismiss(parsed.data.id), "Dismissed.");
+}
+
+export async function linkSuggestionAction(_prev: MessageState, formData: FormData): Promise<MessageState> {
+  await requireSession();
+  assertWritable();
+  const parsed = linkSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { status: "error", message: z.flattenError(parsed.error).fieldErrors.applicationId?.[0] ?? "Pick an application." };
+  return decide(() => link(parsed.data.id, parsed.data.applicationId), "Linked.");
 }

@@ -26,6 +26,15 @@ export const EMAIL_TYPES = ["acknowledged", "interview", "assessment", "rejectio
 export const emailTypeSchema = z.enum(EMAIL_TYPES);
 export type EmailType = z.infer<typeof emailTypeSchema>;
 
+export const EMAIL_TYPE_LABELS: Record<EmailType, string> = {
+  acknowledged: "Acknowledged",
+  interview: "Interview",
+  assessment: "Assessment",
+  rejection: "Rejection",
+  offer: "Offer",
+  not_relevant: "Not relevant",
+};
+
 // The status each type suggests. An assessment (take-home, coding test)
 // is part of the interview process. Not-relevant suggests nothing.
 export const STATUS_FOR_EMAIL_TYPE: Record<EmailType, Status | null> = {

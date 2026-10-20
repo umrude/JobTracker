@@ -80,3 +80,13 @@ export function earliestAppliedAt(db: AppDb, userId: number): Date | null {
     .get();
   return row?.earliest ?? null;
 }
+
+// After a successful sync: where the next one continues from. Only saved
+// once every message in the batch has been stored, so a sync that fails
+// halfway is simply redone (already-processed messages are skipped).
+export function recordGmailSync(db: AppDb, userId: number, historyId: string, now = new Date()): void {
+  db.update(gmailConnections)
+    .set({ historyId, lastSyncedAt: now })
+    .where(eq(gmailConnections.userId, userId))
+    .run();
+}

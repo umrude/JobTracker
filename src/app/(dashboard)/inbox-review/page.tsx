@@ -5,11 +5,17 @@ import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 import { isWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
 import { getGmailStatus, type GmailStatus } from "@/server/db/gmail-connections";
+import { listPendingSuggestions, listRecentlyDecided } from "@/server/db/email-events";
+import { listApplicationsWithJob } from "@/server/db/applications";
+import { EMAIL_TYPE_LABELS } from "@/lib/schemas/email";
+import { STATUS_LABELS } from "@/lib/schemas/status";
 import { GMAIL_NOTICE_TEXT, parseGmailNotice } from "@/lib/email/connect-notices";
 import { MAX_LOOKBACK_DAYS } from "@/lib/email/sync-window";
 import { cn } from "@/lib/utils";
 import { connectGmailAction, disconnectGmailAction } from "./actions";
 import { SyncStartForm } from "./_components/sync-start-form";
+import { SyncButton } from "./_components/sync-button";
+import { SuggestionCard } from "./_components/suggestion-card";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 const dateTimeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
@@ -18,9 +24,9 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", t
 // UTC days (see sync-window.ts).
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 
-// A Server Component: the connection is read at render time. The page
-// grows the suggestions list in Step 4d; for now it's where Gmail is
-// connected, reconnected, and disconnected.
+// A Server Component: the connection and the suggestions are read at
+// render time. Only the buttons, the link picker, and the start date are
+// Client Components.
 export default async function InboxReviewPage({ searchParams }: PageProps<"/inbox-review">) {
   await requireSession();
 
@@ -28,6 +34,15 @@ export default async function InboxReviewPage({ searchParams }: PageProps<"/inbo
   const notice = parseGmailNotice(gmail);
   const status = await getGmailStatus();
   const writable = isWritable();
+  const [pending, decided, applications] = await Promise.all([
+    listPendingSuggestions(),
+    listRecentlyDecided(),
+    listApplicationsWithJob(),
+  ]);
+  const choices = applications
+    .map((app) => ({ id: app.id, label: `${app.job.company} · ${app.job.title}` }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const gmailAccount = status.kind === "connected" ? status.email : null;
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
@@ -51,6 +66,49 @@ export default async function InboxReviewPage({ searchParams }: PageProps<"/inbo
       )}
 
       <GmailCard status={status} writable={writable} />
+
+      <section className="space-y-2">
+        <h2 className="font-medium">To review{pending.length > 0 ? ` (${pending.length})` : ""}</h2>
+        {pending.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+            Nothing to review. Sync to check for new email.
+          </p>
+        ) : (
+          <ul className="grid gap-2">
+            {pending.map((row) => (
+              <li key={row.id}>
+                <SuggestionCard row={row} applications={choices} gmailAccount={gmailAccount} writable={writable} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {decided.length > 0 && (
+        <details className="rounded-lg border p-4 text-sm">
+          <summary className="cursor-pointer font-medium">Recently reviewed</summary>
+          <ul className="mt-3 space-y-1.5">
+            {decided.map((row) => (
+              <li key={row.id} className="flex flex-wrap gap-x-2 text-muted-foreground">
+                <span className="text-foreground">
+                  {row.source === "ghosted" ? `Ghosted? ${row.company ?? ""}` : row.subject || "(no subject)"}
+                </span>
+                <span>
+                  · {row.emailType ? EMAIL_TYPE_LABELS[row.emailType] : row.source === "ghosted" ? "Ghosted rule" : "Unclassified"}
+                </span>
+                <span>
+                  ·{" "}
+                  {row.state === "confirmed" && row.proposedStatus
+                    ? `moved to ${STATUS_LABELS[row.proposedStatus]}`
+                    : row.decidedAt && row.decidedAt.getTime() === row.createdAt.getTime()
+                      ? "filed away automatically"
+                      : "dismissed"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }
@@ -68,6 +126,9 @@ function GmailCard({ status, writable }: { status: GmailStatus; writable: boolea
             inbox is off here.
           </CardDescription>
         </CardHeader>
+        <CardContent>
+          <SyncButton disabled={!writable} disabledMessage="The demo inbox is already synced; the read-only demo can't sync again." />
+        </CardContent>
       </Card>
     );
   }
@@ -115,6 +176,7 @@ function GmailCard({ status, writable }: { status: GmailStatus; writable: boolea
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
+        {!status.needsReconnect && <SyncButton disabled={!writable} disabledMessage="Disabled in demo mode" />}
         {status.needsReconnect && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/40 px-3 py-2">
             <p className="flex items-center gap-2 text-sm text-destructive">

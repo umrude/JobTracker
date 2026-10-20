@@ -13,6 +13,9 @@ export type GhostedInput = {
   id: number;
   status: Status;
   appliedAt: Date | null;
+  // When you last changed the application (moved it, edited it). A card
+  // you moved to Interviewing last week isn't ghosted, email or not.
+  updatedAt: Date | null;
   // The newest email linked to it, if any.
   lastEmailAt: Date | null;
   // When you last dismissed a ghosted suggestion for it, if ever.
@@ -26,7 +29,7 @@ export function ghostedCandidates(applications: readonly GhostedInput[], now: Da
   return applications
     .filter((app) => {
       if (!WAITING.has(app.status) || app.ghostedPending) return false;
-      const last = Math.max(app.appliedAt?.getTime() ?? 0, app.lastEmailAt?.getTime() ?? 0);
+      const last = Math.max(app.appliedAt?.getTime() ?? 0, app.updatedAt?.getTime() ?? 0, app.lastEmailAt?.getTime() ?? 0);
       if (last === 0 || last > cutoff) return false;
       // You said "not ghosted" after the last activity: wait for new silence.
       if (app.ghostedDismissedAt && app.ghostedDismissedAt.getTime() >= last) {

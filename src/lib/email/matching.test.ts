@@ -98,6 +98,7 @@ describe("ghostedCandidates", () => {
     id: 1,
     status: "applied",
     appliedAt: daysAgo(40),
+    updatedAt: daysAgo(40),
     lastEmailAt: null,
     ghostedDismissedAt: null,
     ghostedPending: false,
@@ -108,8 +109,9 @@ describe("ghostedCandidates", () => {
     expect(ghostedCandidates([app({})], now)).toEqual([1]);
   });
 
-  it("counts a recent email as activity", () => {
+  it("counts a recent email or a recent change to the application as activity", () => {
     expect(ghostedCandidates([app({ lastEmailAt: daysAgo(10) })], now)).toEqual([]);
+    expect(ghostedCandidates([app({ updatedAt: daysAgo(6) })], now)).toEqual([]);
   });
 
   it("only applies while waiting to hear back", () => {
@@ -119,6 +121,6 @@ describe("ghostedCandidates", () => {
   it("doesn't repeat a suggestion that's pending, or one you dismissed until 30 more days pass", () => {
     expect(ghostedCandidates([app({ ghostedPending: true })], now)).toEqual([]);
     expect(ghostedCandidates([app({ ghostedDismissedAt: daysAgo(5) })], now)).toEqual([]);
-    expect(ghostedCandidates([app({ appliedAt: daysAgo(80), ghostedDismissedAt: daysAgo(35) })], now)).toEqual([1]);
+    expect(ghostedCandidates([app({ appliedAt: daysAgo(80), updatedAt: daysAgo(80), ghostedDismissedAt: daysAgo(35) })], now)).toEqual([1]);
   });
 });

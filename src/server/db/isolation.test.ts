@@ -38,6 +38,8 @@ const resumesDal = await import("@/server/db/resumes");
 const comparisonsDal = await import("@/server/db/comparisons");
 const profileDal = await import("@/server/db/profile");
 const gmailDal = await import("@/server/db/gmail-connections");
+const emailEventsDal = await import("@/server/db/email-events");
+const { insertEmailEvent } = await import("@/server/db/email-event-store");
 
 const DEMO_TEX = fs.readFileSync(
   path.join(process.cwd(), "src/server/db/fixtures/demo-resume.tex"),
@@ -463,5 +465,46 @@ describe("gmail connection", () => {
 
     await connect("other@gmail.example", "third");
     expect(await gmailDal.getGmailStatus()).toMatchObject({ email: "other@gmail.example", synced: false, startChosen: false });
+  });
+});
+
+describe("email suggestions", () => {
+  it("lists, confirms, dismisses, and links only your own", async () => {
+    as(ALICE);
+    const alicesApp = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied" });
+    insertEmailEvent(testDb, ALICE, {
+      source: "email",
+      gmailMessageId: "alice-msg",
+      gmailThreadId: "alice-thread",
+      subject: "Interview invitation",
+      applicationId: alicesApp.id,
+      emailType: "interview",
+      confidence: 0.9,
+    });
+    const [alices] = await emailEventsDal.listPendingSuggestions();
+    expect(alices).toMatchObject({ company: "Acme", proposedStatus: "interviewing" });
+
+    as(BOB);
+    const bobsApp = await applicationsDal.createApplication({ company: "Globex", title: "Developer", status: "applied" });
+    expect(await emailEventsDal.listPendingSuggestions()).toEqual([]);
+    expect(await emailEventsDal.listRecentlyDecided()).toEqual([]);
+    expect(await emailEventsDal.countPendingSuggestions()).toBe(0);
+    expect((await emailEventsDal.confirm(alices.id)).ok).toBe(false);
+    expect((await emailEventsDal.dismiss(alices.id)).ok).toBe(false);
+    expect((await emailEventsDal.link(alices.id, bobsApp.id)).ok).toBe(false);
+
+    // Bob's own email can't be linked to Alice's application either.
+    insertEmailEvent(testDb, BOB, { source: "email", gmailMessageId: "bob-msg", subject: "Hi", emailType: "offer", confidence: 0.9 });
+    const [bobs] = await emailEventsDal.listPendingSuggestions();
+    expect((await emailEventsDal.link(bobs.id, alicesApp.id)).ok).toBe(false);
+    // The same Gmail message id is a separate row per user.
+    insertEmailEvent(testDb, BOB, { source: "email", gmailMessageId: "alice-msg", subject: "Same id" });
+    expect(await emailEventsDal.countPendingSuggestions()).toBe(2);
+
+    as(ALICE);
+    expect(await emailEventsDal.countPendingSuggestions()).toBe(1);
+    expect(await emailEventsDal.confirm(alices.id)).toEqual({ ok: true, status: "interviewing" });
+    const [app] = await applicationsDal.listApplicationsWithJob();
+    expect(app.status).toBe("interviewing");
   });
 });

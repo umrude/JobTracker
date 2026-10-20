@@ -5,6 +5,7 @@ import { env } from "@/server/env";
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { gmailNeedsReconnect } from "@/server/db/gmail-connections";
+import { countPendingSuggestions } from "@/server/db/email-events";
 import { toggleDemoModeAction } from "./mode-actions";
 import { NavLinks } from "./nav-links";
 
@@ -25,13 +26,15 @@ export default async function AppLayout({
   // On every page, since an expired connection quietly stops sync. Only
   // with a session: without one, the page itself redirects to sign-in.
   const reconnectGmail = session?.user ? await gmailNeedsReconnect() : false;
+  // The public demo has no session but does have suggestions to show.
+  const inboxCount = session?.user || env.DEMO_MODE ? await countPendingSuggestions() : 0;
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex items-center justify-between border-b px-6 py-3">
         <div className="flex items-center gap-6">
           <span className="font-semibold">Job Tracker</span>
-          <NavLinks />
+          <NavLinks inboxCount={inboxCount} />
         </div>
         <div className="flex items-center gap-4">
           {!env.DEMO_MODE && (

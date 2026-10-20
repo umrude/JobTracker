@@ -1,6 +1,7 @@
 // No "server-only" here: pure functions for the classifier eval, used by
 // scripts/eval-classifier.ts and tested on their own.
 import type { EmailMeta, EmailType } from "@/lib/schemas/email";
+import { CONFIDENT_AT } from "@/lib/email/propose";
 import { parseFrom } from "@/server/gmail/parse";
 import type { ClassifyInput } from "@/server/llm/classify-email";
 import type { EvalCase } from "@/server/llm/classify-eval-cases";
@@ -54,8 +55,8 @@ export type EvalReport = {
   misses: EvalOutcome[];
 };
 
-// Sync treats 0.8 and above as "sure" when ranking suggestions (Step 4d).
-export const CONFIDENT_AT = 0.8;
+// The same "sure" threshold sync uses.
+export { CONFIDENT_AT };
 
 export function scoreEval(outcomes: readonly EvalOutcome[]): EvalReport {
   // Written out rather than built from EMAIL_TYPES, so the compiler checks

@@ -7,7 +7,7 @@ Phase 4. How the app reads your inbox for news about your applications and turns
 | 4a | Email-event schema, pre-filter, matching, ghosted rule, demo inbox | Done |
 | 4b | Connect Gmail (OAuth), encrypted tokens, the Gmail client | Done |
 | 4c | Classifier, demo classifications, eval set and script | Done |
-| 4d | Sync route, review inbox, confirm and dismiss | Planned |
+| 4d | Sync route, review inbox, confirm and dismiss | Done |
 | 4e | Demo seed, docs, end-to-end check | Planned |
 
 ## The flow
@@ -223,3 +223,82 @@ The script runs under `tsx --conditions=react-server`, which resolves `server-on
 ### Demo mode
 
 `classify-demo.ts` has a canned answer for each of the 9 demo emails the pre-filter keeps: what a good classifier should say, including the reschedule (interview) and the cold recruiter (not relevant). A test checks they cover exactly the pre-filter's candidates and pass validation unchanged.
+
+## Step 4d: syncing and reviewing
+
+Code: `src/server/gmail/sync.ts` (the pipeline), `src/server/gmail-sync.ts` (live and demo wiring), `src/app/api/sync/route.ts`, `src/lib/email/propose.ts`, the review data layer (`email-event-store.ts`, `email-events.ts`), and the Inbox page.
+
+### One sync
+
+**Sync now** on the Inbox page posts to `/api/sync`, which runs `syncInbox`:
+
+1. **Read what's new.** With a saved position, that's Gmail's history since then. Before the first sync, or if Gmail's history has expired, it reads by date: from the start date, or a day before the last sync.
+2. **Skip what was processed before**, by Gmail message id.
+3. **Pre-filter and match**, oldest first, so an acknowledgement links its thread before the rejection that replies to it is matched, even within one sync.
+
+   **The fix for the gap the eval found:** a message in a thread already linked to an application is a candidate even if the pre-filter wouldn't keep it ("Re: Scheduling ... Monday works").
+4. **Classify** the candidates, a few at a time.
+   - Live: the body is fetched, sent to the model, and dropped.
+   - Demo: the canned answers.
+
+   An email the classifier couldn't answer is stored anyway, marked "Couldn't classify". With the sync position moving on, it would otherwise never be seen again.
+5. **Store** one row per candidate.
+   - A *sure* "not relevant" (confidence 0.8 or above) is filed straight under dismissed: kept, so it isn't processed again, but out of your way.
+   - Everything else waits for review.
+   - Emails the pre-filter dropped aren't stored at all.
+6. **The ghosted rule**: waiting applications with no email and no change for 30 days get a "Ghosted?" suggestion.
+
+   A recent change counts as activity, as well as an email: an application moved to Interviewing last week isn't ghosted.
+7. **Save the position** (Gmail's history id), only after everything is stored. A sync that fails halfway is simply run again, and the messages it already stored are skipped.
+
+`syncInbox` takes its database, mail source, and classifier as arguments. Live mode, demo mode, the tests, and the demo seed (Step 4e) all run the same code.
+
+**Why a route handler, not a Server Action:**
+
+- A sync is a job with a result to report, not a form submission.
+- It leaves room for something else to start one later, such as a scheduled task on this machine.
+
+It's POST-only and needs your session cookie (SameSite=Lax), so another site can't start a sync in your name. The read-only public demo refuses it on the server.
+
+**Failures** come back as one clear sentence, for example:
+
+- "Connect Gmail first."
+- "Set ANTHROPIC_API_KEY."
+- "Reconnect Gmail", which also marks the connection and shows the banner.
+- "The sync didn't finish... try again", which saves nothing partial.
+
+### What a suggestion proposes
+
+The classifier says what the email *is*. `proposeStatus` (pure, tested) decides what that means for the application:
+
+| Email | Moves from | To |
+|---|---|---|
+| Acknowledged | Applied, Ghosted | Acknowledged |
+| Interview, assessment | Applied, Acknowledged, Ghosted | Interviewing |
+| Offer | Applied, Acknowledged, Interviewing, Ghosted | Offer |
+| Rejection | any open status, including Offer (a rescinded offer) | Rejected |
+
+It never moves an application backwards: a late "we received your application" doesn't undo Interviewing. Anything else is **news**: shown, with "Got it" instead of a move.
+
+**The proposal is worked out live.** What's shown and what Confirm applies come from the application's status *now*, not from when the email was synced.
+
+Example: you confirm the rejection, and the acknowledgement from two weeks earlier for the same application becomes news instead of offering "Rejected → Acknowledged". If the application has moved on by the time you click, Confirm says so instead of moving it. The proposal stored at sync time stays as the record. Confirming stores what was actually applied.
+
+### Reviewing
+
+Each card shows:
+
+- the type and confidence. Below 0.8 it's marked unsure, with a dashed outline.
+- the subject, sender, snippet, and the model's one-line reason.
+- the linked application with its current status, and the proposed move.
+- "Open in Gmail", since the body is never stored here.
+
+The actions:
+
+- **Move to …** confirms: the application moves, in one transaction with marking the suggestion confirmed.
+- **Dismiss** (or **Got it** for news, **Not ghosted** for the ghosted rule). Dismissing a ghosted suggestion resets its 30-day timer.
+- **Link / Relink** picks the application for an unlinked (or wrongly linked) email. Its suggestion is worked out again for that application, and later emails in the same thread follow the link.
+
+Suggestions that change something come first, then news, newest first. "Recently reviewed" lists the last ten decisions, including what was filed away automatically. The nav shows how many are waiting.
+
+Every action re-checks on the server that the suggestion is yours and still pending. Isolation tests cover listing, confirming, dismissing, and linking across two users, including linking your email to someone else's application.
