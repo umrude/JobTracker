@@ -355,3 +355,40 @@ describe("cover letters", () => {
     expect(rows[1]?.generatedText).toBe("Dear Acme,");
   });
 });
+
+describe("tailored comparisons", () => {
+  it("never replace the original comparison, save no skill rows, and are yours only", async () => {
+    const { createTailoringDraft } = await import("@/server/db/tailored-resumes");
+    const result = { score: 60, matchedSkills: ["React"], missingSkills: ["AWS"], missingKeywords: [], suggestions: [] };
+    as(ALICE);
+    const job = await jobsDal.createSavedJob({ company: "Acme", title: "Engineer", listingText: "x" });
+    const resume = await resumesDal.createResumeVersion("alice", null);
+    const original = await comparisonsDal.insertComparison({ jobId: job.id, resumeId: resume.id, result, model: "demo" });
+    const tailoring = await createTailoringDraft({
+      jobId: job.id,
+      resumeId: resume.id,
+      proposal: { summary: null, skills: [], sections: [], trimOrder: [], rationale: "" },
+      issues: [],
+      model: "demo",
+    });
+    const tailored = await comparisonsDal.insertTailoredComparison({
+      jobId: job.id,
+      resumeId: resume.id,
+      tailoringId: tailoring.id,
+      result: { ...result, score: 75 },
+      model: "demo",
+    });
+
+    // "The latest comparison for this job" is still the original.
+    expect((await comparisonsDal.getLatestComparisonRow(job.id))?.id).toBe(original.id);
+    expect((await comparisonsDal.listLatestComparisonRows()).get(job.id)?.id).toBe(original.id);
+    expect((await comparisonsDal.getLatestTailoredComparisonRow(tailoring.id))?.id).toBe(tailored.id);
+    // Only the original saved skill rows.
+    const rowsFor = (id: number) => testDb.select().from(schema.comparisonSkills).all().filter((r) => r.comparisonId === id);
+    expect(rowsFor(original.id)).toHaveLength(2);
+    expect(rowsFor(tailored.id)).toHaveLength(0);
+
+    as(BOB);
+    expect(await comparisonsDal.getLatestTailoredComparisonRow(tailoring.id)).toBeUndefined();
+  });
+});

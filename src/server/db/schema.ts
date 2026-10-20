@@ -125,6 +125,12 @@ export const comparisons = sqliteTable(
     resumeId: integer("resume_id")
       .notNull()
       .references(() => resumes.id, { onDelete: "cascade" }),
+    // Set when this scored an approved tailored resume rather than the
+    // resume as written (Step 7). Every "latest comparison for this job"
+    // query excludes these, so a tailored score never replaces the
+    // original one, and they save no skill rows (they'd inflate the
+    // Phase 5 recap: the resume was written toward the listing).
+    tailoringId: integer("tailoring_id").references(() => tailoredResumes.id, { onDelete: "cascade" }),
     // Typed as unknown on purpose: stored results are re-validated with the
     // comparison Zod schema on every read (safeParse), so an old row written
     // under an earlier schema version shows as "needs re-run" instead of

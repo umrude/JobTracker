@@ -91,7 +91,7 @@ src/
   - Every item records its source: from resume, added by me, or confirmed from a comparison gap (and which job)
   - The profile owns content; the .tex owns presentation (header, section order, layout). When they differ, the profile wins in tailored output
 - **ComparisonSkill** (Phase 3): comparison, canonical skill name, matched or missing. Normalized rows for counting across listings
-- **Comparison**: job, resume, result JSON (Zod-validated), createdAt
+- **Comparison**: job, resume, result JSON (Zod-validated), createdAt, and optionally the approved tailored resume it scored. "Latest comparison for a job" always means the resume as written (`tailoring_id IS NULL`); tailored comparisons save no skill rows
 - **EmailEvent** (Phase 4): gmail message id, thread id, linked application, classified type, confidence, confirmed flag
 - **CoverLetter** (Phase 3): job, resume used, tone, versions
 - **TailoredResume** (Phase 3): job, resume used, approved edits and a snapshot of the profile text used (Zod-validated), versions. PDFs are rebuilt from LaTeX source + edits, not stored. Comparisons can target a tailored resume instead of a resume version
@@ -129,7 +129,7 @@ Work on one phase at a time. Do not start a later phase unless I ask.
 4. **Gmail sync**: OAuth, incremental sync, pre-filter, classifier, review inbox, classifier eval set.
 5. **Insights**: a skill-gap recap across comparisons and applications (skills most often missing, whether they're in my profile, Learning, or absent, and after Phase 4, how they relate to rejections). Shows counts and facts, never causal claims. Demo seed with enough fake history to be meaningful.
 6. **Polish**: README with architecture diagram and decision log, screenshots/GIF from demo mode, CI (GitHub Actions), hosted read-only demo.
-**Current phase: 3, not started** (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page)
+**Current phase: 4, not started** (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page. Phase 3 complete: LaTeX source and compiling, profile with "I have this" and skill aliases, multi-user readiness, tailored resumes with honesty checks and per-change review, cover letters, and the tailored comparison; see docs/tailored-resumes.md and docs/cover-letters.md)
  
 ## Hosting
 

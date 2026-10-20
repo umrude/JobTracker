@@ -12,9 +12,9 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "@/server/db/schema";
 import { DEMO_DB_PATH, DEMO_USER_EMAIL } from "@/server/db/paths";
 import type { Status } from "@/lib/schemas/status";
-import { DEMO_MODEL, getDemoComparison } from "@/server/llm/compare-demo";
+import { DEMO_MODEL, getDemoComparison, getDemoTailoredComparison } from "@/server/llm/compare-demo";
 import { importProfileFromLatexInto, type ProfileDb } from "@/server/db/profile-store";
-import { insertComparisonWithSkills } from "@/server/db/comparison-store";
+import { insertComparisonWithSkills, insertTailoredComparisonRow } from "@/server/db/comparison-store";
 import { insertTailoringDraft, saveTailoringApproval } from "@/server/db/tailoring-store";
 import { buildApproval } from "@/lib/tailoring/approve";
 import { insertCoverLetter } from "@/server/db/cover-letter-store";
@@ -532,6 +532,16 @@ function seedApprovedTailoring(
   const built = buildApproval({ ...context, proposed: checked.proposal, accepted, latexSource: resume.latexSource });
   if (!built.ok) throw new Error(`Demo approval failed: ${built.message}`);
   saveTailoringApproval(db, userId, draft.id, { edits: built.approval.edits, final: built.approval.final, pages: null });
+
+  // Its comparison against the same listing, so the demo shows original vs
+  // tailored scores.
+  insertTailoredComparisonRow(db, userId, {
+    jobId,
+    resumeId: resume.id,
+    tailoringId: draft.id,
+    result: getDemoTailoredComparison(jobUrl),
+    model: DEMO_MODEL,
+  });
   // A cover letter written from the tailored resume, so the demo shows a
   // complete application. Checked like a generated one.
   const tailored = parseResumeLatex(built.approval.tex);

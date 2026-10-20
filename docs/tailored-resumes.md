@@ -14,7 +14,7 @@ How Phase 3 turns your resume into a version tailored to one job listing, withou
 | 5b | Tailoring with the LLM, storage, demo fixtures | Done |
 | 5c | Review, approve, compile | Done |
 | 6 | Cover letters from the tailored resume (see [cover-letters.md](cover-letters.md)) | Done |
-| 7 | The "Prepare application" page, and the tailored comparison | Planned |
+| 7 | The "Prepare application" page, and the tailored comparison | Done |
 
 ## The flow
 
@@ -553,3 +553,19 @@ The public demo shows both states: **Northwind** as a draft to review (with the 
 **Correction to Step 3: which demo compiles.** Step 3 said demo mode never compiles. That's right for the **public** demo, whose host has no TeX engine, but too strict for the **local demo preview** (the cookie toggle), which runs on your own machine where Tectonic is installed. Without this, approving anything in the local preview other than the one pre-built selection would report that the PDF couldn't be built. `renderLatexPdf` (`src/server/latex/render.ts`) is now the one place that decides: the public demo serves pre-built PDFs only; everywhere else compiles, falling back to a pre-built PDF if Tectonic isn't installed. Both PDF routes and approval use it.
 
 `pnpm demo:pdfs` skips PDFs that already exist (the name is a hash of the LaTeX, so an existing file is up to date), because every compile embeds a fresh creation date and would otherwise show as a change in git. `--force` rebuilds everything.
+
+## Step 7: comparing the tailored resume
+
+Code: `runTailoredComparison` in `src/server/comparisons.ts`, the tailored queries in `src/server/db/comparisons.ts`, and `TailoredScore` on the Prepare application page.
+
+Once a tailored resume is approved, **Compare tailored version** scores it against the same listing and shows **original → tailored** (the demo's Bramblewood: 58 → 66), with the caution we agreed: the tailored resume was written toward this listing, so part of any gain reflects that rather than a better underlying fit, and tailoring can't add experience you don't have. What's still missing is listed underneath.
+
+The text compared is the tailored resume exactly as its PDF shows it, rebuilt from the approved edits, using the same comparison prompt and model call as the original.
+
+**The original score stays the original.** A tailored comparison is a `comparisons` row with `tailoring_id` set. Every "latest comparison for this job" query (the comparison page, the Compare list, the gap labels) filters on `tailoring_id IS NULL`, so a tailored score can never quietly replace your resume-as-written score. A test checks exactly that.
+
+**Tailored comparisons save no skill rows.** The normalized skill rows are the data for the Phase 5 skill-gap recap, which should count your resume as written. A resume written toward the listing would inflate its matches.
+
+**The migration was hand-edited again.** drizzle-kit generated `ALTER TABLE ... ADD tailoring_id ... REFERENCES ...` without `ON DELETE cascade` (the same problem as migration 0005). Here no rebuild was needed: SQLite allows adding a nullable foreign-key column with a NULL default, cascade included. A migration test checks the cascade is there.
+
+**Demo:** the gains are deliberately modest. Bramblewood rises from 58 to 66 because the guild bullet now covers teaching accessibility, but screen-reader testing and WCAG audits stay gaps.

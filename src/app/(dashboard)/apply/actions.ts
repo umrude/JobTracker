@@ -6,6 +6,7 @@ import { assertWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
 import { approveTailoring, runTailoring, trimTailoring } from "@/server/tailoring";
 import { generateCoverLetter, updateCoverLetter } from "@/server/cover-letters";
+import { runTailoredComparison } from "@/server/comparisons";
 import { idSchema } from "@/lib/schemas/form";
 import { generateCoverLetterSchema, saveCoverLetterSchema } from "@/lib/schemas/cover-letter";
 import { formError, validationError, type FormState, type MessageState } from "@/lib/form-state";
@@ -57,6 +58,21 @@ export async function approveTailoringAction(_prevState: MessageState, formData:
 
   revalidatePath(`/apply/${parsed.data.jobId}`);
   return { status: "success", message: result.warning ?? "Approved." };
+}
+
+// Scores the approved tailored resume against the same listing (Step 7).
+export async function compareTailoredAction(_prevState: FormState, formData: FormData): Promise<FormState> {
+  await requireSession();
+  assertWritable();
+
+  const parsed = z.object({ tailoringId: idSchema, jobId: idSchema }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return formError("Invalid request.");
+
+  const result = await runTailoredComparison(parsed.data.tailoringId);
+  if (!result.ok) return formError(result.error.message);
+
+  revalidatePath(`/apply/${parsed.data.jobId}`);
+  return { status: "success" };
 }
 
 // Cover letters (Step 6). Writing can take up to a minute in live mode.

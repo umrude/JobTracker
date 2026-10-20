@@ -1,10 +1,10 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { getMode } from "@/server/mode";
 import { requireUserId } from "@/server/current-user";
 import { comparisons, jobs, resumes } from "@/server/db/schema";
-import { insertComparisonWithSkills } from "@/server/db/comparison-store";
+import { insertComparisonWithSkills, insertTailoredComparisonRow } from "@/server/db/comparison-store";
 import type { Comparison } from "@/lib/schemas/comparison";
 
 // Every query filters on the current user (requireUserId).
@@ -63,13 +63,38 @@ export async function getLatestComparisonRow(jobId: number) {
     .select(comparisonColumns)
     .from(comparisons)
     .innerJoin(resumes, eq(resumes.id, comparisons.resumeId))
-    .where(and(eq(comparisons.jobId, jobId), eq(comparisons.userId, userId)))
+    .where(and(eq(comparisons.jobId, jobId), eq(comparisons.userId, userId), isNull(comparisons.tailoringId)))
     .orderBy(...newestFirst)
     .limit(1)
     .get();
 }
 
 export type ComparisonRow = NonNullable<Awaited<ReturnType<typeof getLatestComparisonRow>>>;
+
+// The newest comparison of one approved tailored resume (Step 7). The
+// queries above only ever return comparisons of the resume as written.
+export async function getLatestTailoredComparisonRow(tailoringId: number) {
+  const { db, userId } = await scope();
+  return db
+    .select(comparisonColumns)
+    .from(comparisons)
+    .innerJoin(resumes, eq(resumes.id, comparisons.resumeId))
+    .where(and(eq(comparisons.tailoringId, tailoringId), eq(comparisons.userId, userId)))
+    .orderBy(...newestFirst)
+    .limit(1)
+    .get();
+}
+
+export async function insertTailoredComparison(input: {
+  jobId: number;
+  resumeId: number;
+  tailoringId: number;
+  result: Comparison;
+  model: string;
+}) {
+  const { db, userId } = await scope();
+  return insertTailoredComparisonRow(db, userId, input);
+}
 
 // The latest comparison for every job that has one, for the Compare index.
 // Picking the first row per job in code keeps the query simple; with one
@@ -80,7 +105,7 @@ export async function listLatestComparisonRows(): Promise<Map<number, Comparison
     .select(comparisonColumns)
     .from(comparisons)
     .innerJoin(resumes, eq(resumes.id, comparisons.resumeId))
-    .where(eq(comparisons.userId, userId))
+    .where(and(eq(comparisons.userId, userId), isNull(comparisons.tailoringId)))
     .orderBy(...newestFirst)
     .all();
 

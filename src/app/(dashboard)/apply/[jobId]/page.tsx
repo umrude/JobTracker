@@ -12,6 +12,9 @@ import { getTailoringReview, type TailoringReview } from "@/server/tailoring";
 import { idSchema } from "@/lib/schemas/form";
 import type { CheckIssue } from "@/lib/schemas/tailoring";
 import { listCoverLetters, type StoredCoverLetter } from "@/server/cover-letters";
+import { getLatestComparison, getLatestTailoredComparison, type StoredComparison } from "@/server/comparisons";
+import { scoreBand } from "@/lib/score-band";
+import { CompareTailoredButton } from "../_components/compare-tailored-button";
 import { LENGTH_LABELS, TONE_LABELS } from "@/lib/cover-letter/labels";
 import { cn } from "@/lib/utils";
 import { CoverLetterOptions } from "../_components/cover-letter-options";
@@ -35,11 +38,15 @@ export default async function ApplyPage({ params, searchParams }: PageProps<"/ap
   const job = await getJobForComparison(parsedId.data);
   if (!job) notFound();
 
-  const [activeResume, review, letters] = await Promise.all([
+  const [activeResume, review, letters, original] = await Promise.all([
     getActiveResume(),
     getTailoringReview(job.id),
     listCoverLetters(job.id),
+    getLatestComparison(job.id),
   ]);
+  // The approved tailored version's own comparison, if it has one (Step 7).
+  const approvedId = review.latest?.status === "ok" && review.latest.state === "approved" ? review.latest.id : null;
+  const tailored = approvedId === null ? null : await getLatestTailoredComparison(approvedId);
   const writable = isWritable();
   // Which cover letter version to show: ?letter=2, or the newest.
   const requested = idSchema.safeParse((await searchParams).letter);
@@ -82,7 +89,14 @@ export default async function ApplyPage({ params, searchParams }: PageProps<"/ap
         </Notice>
       )}
 
-      <TailoredResumeCard review={review} jobId={job.id} blocker={blocker} writable={writable} activeResumeId={activeResume?.id} />
+      <TailoredResumeCard
+        review={review}
+        jobId={job.id}
+        blocker={blocker}
+        writable={writable}
+        activeResumeId={activeResume?.id}
+        scores={{ original, tailored }}
+      />
 
       <CoverLetterCard
         jobId={job.id}
@@ -186,12 +200,14 @@ function TailoredResumeCard({
   blocker,
   writable,
   activeResumeId,
+  scores,
 }: {
   review: TailoringReview;
   jobId: number;
   blocker: string | undefined;
   writable: boolean;
   activeResumeId: number | undefined;
+  scores: Scores;
 }) {
   const { latest } = review;
   const generate = (label: string, variant: "default" | "outline") => (
@@ -242,7 +258,7 @@ function TailoredResumeCard({
             )}
 
             {latest.state === "approved" && (
-              <ApprovedSummary review={review} tailoringId={latest.id} jobId={jobId} writable={writable} />
+              <ApprovedSummary review={review} tailoringId={latest.id} jobId={jobId} writable={writable} scores={scores} />
             )}
           </>
         )}
@@ -269,16 +285,78 @@ function CheckerFlags({ issues }: { issues: CheckIssue[] }) {
   );
 }
 
+type Scores = { original: StoredComparison | null; tailored: StoredComparison | null };
+
+// Original vs tailored score for the same listing, with the caution we
+// agreed: the tailored resume was written toward this listing, so part of
+// any gain reflects that rather than a better underlying fit.
+function TailoredScore({
+  scores,
+  tailoringId,
+  jobId,
+  writable,
+}: {
+  scores: Scores;
+  tailoringId: number;
+  jobId: number;
+  writable: boolean;
+}) {
+  const original = scores.original?.status === "ok" ? scores.original.comparison : null;
+  const tailored = scores.tailored?.status === "ok" ? scores.tailored.comparison : null;
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <p className="text-sm font-medium">Match score for this listing</p>
+      {tailored ? (
+        <>
+          <p className="flex items-baseline gap-2 text-2xl font-semibold tabular-nums">
+            {original && (
+              <>
+                <span className="text-muted-foreground">{original.score}</span>
+                <span className="text-base text-muted-foreground" aria-label="to">
+                  →
+                </span>
+              </>
+            )}
+            <span>{tailored.score}</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {original ? "original → tailored" : "tailored"} · {scoreBand(tailored.score).label}
+            </span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            The tailored resume was written toward this listing, so part of any gain reflects that, not a better
+            underlying fit. Tailoring can&apos;t add experience you don&apos;t have, so real gaps stay gaps.
+          </p>
+          {tailored.missingSkills.length > 0 && (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Still missing: </span>
+              {tailored.missingSkills.join(", ")}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          See how the tailored version scores against this listing
+          {original ? `, compared with the original ${original.score}` : ""}.
+        </p>
+      )}
+      <CompareTailoredButton tailoringId={tailoringId} jobId={jobId} rerun={tailored !== null} disabled={!writable} />
+    </div>
+  );
+}
+
 function ApprovedSummary({
   review,
   tailoringId,
   jobId,
   writable,
+  scores,
 }: {
   review: TailoringReview;
   tailoringId: number;
   jobId: number;
   writable: boolean;
+  scores: Scores;
 }) {
   const { pages, trimSuggestions } = review;
   return (
@@ -297,6 +375,8 @@ function ApprovedSummary({
           {pages === null ? "Page count unavailable." : pages === 1 ? "Fits on one page." : `${pages} pages.`}
         </p>
       </div>
+
+      <TailoredScore scores={scores} tailoringId={tailoringId} jobId={jobId} writable={writable} />
 
       {pages !== null && pages > 1 && (
         <div className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">

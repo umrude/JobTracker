@@ -21,6 +21,21 @@ export function skillResolverFor(db: AppDb, userId: number): SkillResolver {
   return createSkillResolver(skills);
 }
 
+// Saves a comparison of an approved tailored resume. No skill rows: the
+// resume was written toward this listing, so its matches would inflate the
+// Phase 5 skill-gap recap, which should count your resume as written.
+export function insertTailoredComparisonRow(
+  db: AppDb,
+  userId: number,
+  input: { jobId: number; resumeId: number; tailoringId: number; result: Comparison; model: string; createdAt?: Date },
+): { id: number } {
+  return db
+    .insert(comparisons)
+    .values({ ...input, userId })
+    .returning({ id: comparisons.id })
+    .get();
+}
+
 // Saves a comparison and its normalized skill rows together, in one
 // transaction, so a comparison never exists without its rows.
 export function insertComparisonWithSkills(

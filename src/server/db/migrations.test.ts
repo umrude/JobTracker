@@ -91,6 +91,13 @@ describe("migration 0005 (multi-user ready)", () => {
     expect(count(sqlite, "users")).toBe(0);
   });
 
+  it("migration 0009 adds comparisons.tailoring_id with ON DELETE cascade", () => {
+    const sqlite = new Database(":memory:");
+    migrate(drizzle(sqlite), { migrationsFolder: MIGRATIONS });
+    const foreignKeys = sqlite.prepare("pragma foreign_key_list(comparisons)").all() as { from: string; on_delete: string }[];
+    expect(foreignKeys.find((fk) => fk.from === "tailoring_id")?.on_delete).toBe("CASCADE");
+  });
+
   it("enforces one active resume per user, not one overall", () => {
     const sqlite = new Database(":memory:");
     migrate(drizzle(sqlite), { migrationsFolder: MIGRATIONS });

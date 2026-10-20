@@ -131,3 +131,55 @@ export function getDemoComparison(jobUrl: string | null): Comparison {
   const fixture = (jobUrl && DEMO_COMPARISONS[jobUrl]) || DEMO_FALLBACK_COMPARISON;
   return comparisonSchema.parse(fixture);
 }
+
+// Comparisons of the demo's tailored resumes (Step 7), matching the demo
+// tailoring fixtures. The gains are deliberately modest: tailoring can
+// surface experience the resume left out, but can't invent what's missing,
+// so real gaps (screen-reader testing, WCAG audits) stay gaps.
+export const DEMO_TAILORED_COMPARISONS: Record<string, ComparisonInput> = {
+  // Bramblewood: the guild bullet now covers teaching accessibility, and
+  // the accessibility work leads.
+  "https://bramblewoodlearning.example/jobs/a11y-07": {
+    score: 66,
+    matchedSkills: [
+      "React",
+      "ARIA",
+      "Keyboard interaction patterns",
+      "axe-core",
+      "Playwright",
+      "Accessibility guidelines and workshops",
+    ],
+    missingSkills: ["Screen reader testing (NVDA, JAWS, VoiceOver)", "WCAG 2.2 AA audits", "Focus management for complex widgets"],
+    missingKeywords: ["WCAG 2.2", "NVDA", "JAWS", "VoiceOver", "screen reader", "IAAP"],
+    suggestions: [
+      "If you've tested with any screen reader, add it. It's the gap this listing weighs most.",
+      "Name the WCAG criteria your ARIA and keyboard fixes addressed, if you know them.",
+    ],
+  },
+  // Northwind: leading with the dashboard and swapping in the map project
+  // tightens an already strong fit.
+  "https://careers.northwindrobotics.example/jobs/1821": {
+    score: 91,
+    matchedSkills: [
+      "React",
+      "TypeScript",
+      "Real-time data (WebSockets)",
+      "Performance work on data-heavy UIs",
+      "D3",
+      "Playwright end-to-end tests",
+      "CI",
+      "Mentoring",
+      "Map interfaces",
+    ],
+    missingSkills: ["Canvas/WebGL rendering"],
+    missingKeywords: ["telemetry", "WebGL", "accessibility reviews"],
+    suggestions: ["Mention 'live telemetry' if the dashboard showed real-time vehicle positions."],
+  },
+};
+
+// A demo tailored comparison, or the original fixture when there isn't
+// one (so the score simply doesn't move).
+export function getDemoTailoredComparison(jobUrl: string | null): Comparison {
+  const fixture = jobUrl ? DEMO_TAILORED_COMPARISONS[jobUrl] : undefined;
+  return fixture ? comparisonSchema.parse(fixture) : getDemoComparison(jobUrl);
+}
