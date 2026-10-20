@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EXPERIENCE_KINDS, PROFICIENCY_LEVELS } from "@/lib/schemas/profile";
 import type { ProfileEntry, ProfileSkill } from "@/lib/profile/types";
-import { EXPERIENCE_LABELS, PROFICIENCY_LABELS } from "./labels";
+import { EXPERIENCE_LABELS, PROFICIENCY_LABELS } from "@/lib/profile/labels";
 
 // Form fields for the profile dialogs. Plain inputs with no client code:
 // the page (a Server Component) renders them and passes them into

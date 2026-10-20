@@ -142,6 +142,33 @@ export const comparisons = sqliteTable(
   ],
 );
 
+// Each comparison's matched and missing skills, one row per skill, with
+// the skill's canonical key (see lib/skills/resolver.ts). The comparison's
+// result JSON has the same skills as the model wrote them; these rows make
+// them countable across listings ("missing in 9 of your last 20"), which
+// is the data for the Phase 5 skill-gap recap.
+export const COMPARISON_SKILL_STATUSES = ["matched", "missing"] as const;
+
+export const comparisonSkills = sqliteTable(
+  "comparison_skills",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: ownerColumn(),
+    comparisonId: integer("comparison_id")
+      .notNull()
+      .references(() => comparisons.id, { onDelete: "cascade" }),
+    // Canonical key, e.g. "postgresql", for counting.
+    skillKey: text("skill_key").notNull(),
+    // Canonical display name at the time, e.g. "PostgreSQL".
+    name: text("name").notNull(),
+    status: text("status", { enum: COMPARISON_SKILL_STATUSES }).notNull(),
+  },
+  (table) => [
+    index("comparison_skills_comparison_id_idx").on(table.comparisonId),
+    index("comparison_skills_user_skill_idx").on(table.userId, table.skillKey),
+  ],
+);
+
 // The profile: everything you've done, a superset of any one resume.
 // Tailoring draws only from it. See docs/tailored-resumes.md, "The profile".
 // One profile per user.

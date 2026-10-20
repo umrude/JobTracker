@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createEntrySchema, createSkillSchema, updateSkillSchema } from "@/lib/schemas/profile";
+import { confirmGapSchema, createEntrySchema, createSkillSchema, updateSkillSchema } from "@/lib/schemas/profile";
 
 describe("createSkillSchema", () => {
   it("parses comma-separated aliases, dropping blanks", () => {
@@ -30,5 +30,26 @@ describe("createEntrySchema", () => {
     expect(
       createEntrySchema.parse({ section: "Education", title: "State University", dates: "", subtitle: " ", detail: "" }),
     ).toEqual({ section: "Education", title: "State University", dates: "", subtitle: "", detail: "" });
+  });
+});
+
+describe("confirmGapSchema", () => {
+  it("validates each choice with its own fields", () => {
+    expect(confirmGapSchema.parse({ mode: "alias", jobId: "3", name: "Postgres", skillId: "9" })).toEqual({
+      mode: "alias",
+      jobId: 3,
+      name: "Postgres",
+      skillId: 9,
+    });
+    expect(confirmGapSchema.parse({ mode: "learning", jobId: "3", name: "Docker", category: "" })).toMatchObject({
+      mode: "learning",
+      category: undefined,
+    });
+    expect(confirmGapSchema.parse({ mode: "highlight", jobId: "3", text: "5+ years of experience" }).mode).toBe("highlight");
+  });
+
+  it("rejects an alias without a skill, and unknown modes", () => {
+    expect(confirmGapSchema.safeParse({ mode: "alias", jobId: "3", name: "Postgres" }).success).toBe(false);
+    expect(confirmGapSchema.safeParse({ mode: "ignore", jobId: "3" }).success).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import { getDb } from "@/server/db/client";
 import { getMode } from "@/server/mode";
 import { requireUserId } from "@/server/current-user";
 import {
+  jobs,
   profileBullets,
   profileEntries,
   profileHighlights,
@@ -20,6 +21,7 @@ import { getActiveResume } from "@/server/db/resumes";
 import { skillKey } from "@/lib/comparison-helpers";
 import type { Profile } from "@/lib/profile/types";
 import type {
+  ConfirmGapInput,
   CreateBulletInput,
   CreateEntryInput,
   CreateHighlightInput,
@@ -253,4 +255,72 @@ export async function deleteHighlight(id: number): Promise<void> {
   db.delete(profileHighlights)
     .where(and(eq(profileHighlights.id, id), eq(profileHighlights.userId, userId)))
     .run();
+}
+
+// ---- "I have this" on a comparison gap ----
+
+// Records your answer to a gap, with the job as the item's source. The job
+// and (for an alias) the skill must be yours; both are checked, not trusted
+// from the form.
+export async function confirmGap(input: ConfirmGapInput): Promise<WriteResult> {
+  const { db, userId } = await scope();
+  return db.transaction((tx) => {
+    const job = tx
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(and(eq(jobs.id, input.jobId), eq(jobs.userId, userId)))
+      .get();
+    if (!job) return NOT_FOUND;
+
+    if (input.mode === "highlight") {
+      tx.insert(profileHighlights)
+        .values({
+          userId,
+          text: input.text,
+          source: "gap",
+          sourceJobId: job.id,
+          sortOrder: nextSortOrder(tx, profileHighlights, userId),
+        })
+        .run();
+      return { ok: true };
+    }
+
+    if (input.mode === "alias") {
+      const skill = tx
+        .select({ id: profileSkills.id, aliases: profileSkills.aliases })
+        .from(profileSkills)
+        .where(and(eq(profileSkills.id, input.skillId), eq(profileSkills.userId, userId)))
+        .get();
+      if (!skill) return NOT_FOUND;
+      // The new alias can't be another skill's name or alias.
+      const existing = findNameClash(tx, userId, input.name, skill.id);
+      if (existing) return clash(existing);
+      if (!skill.aliases.some((alias) => skillKey(alias) === skillKey(input.name))) {
+        tx.update(profileSkills)
+          .set({ aliases: [...skill.aliases, input.name] })
+          .where(and(eq(profileSkills.id, skill.id), eq(profileSkills.userId, userId)))
+          .run();
+      }
+      return { ok: true };
+    }
+
+    // "skill" or "learning": a new skill sourced from this gap.
+    const existing = findNameClash(tx, userId, input.name);
+    if (existing) return clash(existing);
+    tx.insert(profileSkills)
+      .values({
+        userId,
+        name: input.name,
+        nameKey: skillKey(input.name),
+        category: input.category ?? null,
+        proficiency: input.mode === "learning" ? "learning" : (input.proficiency ?? null),
+        experience: input.mode === "skill" ? (input.experience ?? null) : null,
+        note: input.mode === "skill" ? (input.note ?? null) : null,
+        source: "gap",
+        sourceJobId: job.id,
+        sortOrder: nextSortOrder(tx, profileSkills, userId),
+      })
+      .run();
+    return { ok: true };
+  });
 }

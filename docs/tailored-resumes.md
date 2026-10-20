@@ -9,7 +9,7 @@ How Phase 3 turns your resume into a version tailored to one job listing, withou
 | 3 | Compile to PDF with Tectonic | Done |
 | 4a | Profile schema, and import from the .tex | Done |
 | 4b | Profile page: view and edit | Done |
-| 4c | Skill names (aliases), comparison skill rows, "I have this" | Planned |
+| 4c | Skill names (aliases), comparison skill rows, "I have this" | Done |
 | 5 | Tailoring with the LLM, checked in code, reviewed by you | Planned |
 | 6 | Cover letters from the tailored resume | Planned |
 | 7 | The "Prepare application" page, and the tailored comparison | Planned |
@@ -345,3 +345,55 @@ Inputs are plain HTML (`<input>`, native `<select>`, a `<datalist>` suggesting e
 ### Ownership
 
 Every write goes through the user-scoped data layer, and the isolation tests cover them: another user can't edit or delete your skills, entries, bullets, or highlights, can't add a bullet to your entry (refused, not silently attached), and imports only read your own active resume. Name clashes are checked per user, so two users can both have "React".
+
+## Step 4c: skill names, comparison skill rows, and "I have this"
+
+Code: `src/lib/skills/` (the alias list, resolver, comparison rows, wording notes, and gap labels), `src/server/db/comparison-store.ts`, `confirmGap` in `src/server/db/profile.ts`, and the gap dialog on the compare page.
+
+### The alias list and the resolver
+
+`SKILL_ALIASES` has 187 skills, each with the other ways listings and resumes write it: `PostgreSQL: ["postgres", "psql", "pg", "postgre"]`. `createSkillResolver(profileSkills)` turns any name into one canonical skill (`{ key: "postgresql", name: "PostgreSQL" }`), using the built-in list plus your own profile aliases. Unknown skills pass through as themselves.
+
+Choices worth knowing:
+
+- **Ambiguous short forms are left out.** "es" could be ES6 or Elasticsearch; "tf" could be TensorFlow or Terraform. A wrong merge is worse than a missed one, because it silently claims a match.
+- **Look-alikes stay separate:** Angular and AngularJS, Java and JavaScript, React and React Native, UI design and UX design. A test checks each pair.
+- **A test checks no term is listed under two skills**, since that would silently merge them.
+- **Your aliases win** over the built-in list where they disagree: it's your profile, and you confirmed it.
+
+### Normalized skill rows
+
+Each comparison now also saves its matched and missing skills in `comparison_skills`, one row per canonical skill, with the user, comparison, canonical key, and status. The result JSON still has the skills as the model wrote them; the rows make them **countable across listings**, which is what the Phase 5 recap needs. "Postgres" in one listing and "PostgreSQL" in another count as the same skill.
+
+The comparison and its rows are written in **one transaction** by `insertComparisonWithSkills`, used by both the app and the seed, so a comparison never exists without its rows and the demo data goes through the same code. Comparisons saved before this step have no rows; the history builds from here.
+
+### The score is for the resume as written
+
+The score card now says "Match score for resume v2" and that your profile isn't counted, since an applicant tracking system only sees the resume you send. Nothing about your profile changes the score.
+
+### Wording notes
+
+Aliases decide you *have* a skill; they don't change what an applicant tracking system reads. `wordingNotes` looks at each matched skill in the listing's words: if your resume doesn't use those words but does use another name for the same skill, the page shows "The listing says **Postgres**; your resume says **PostgreSQL**. Consider using both." It's computed when the page renders, from the comparison and the resume it used, so nothing extra is stored.
+
+### Gap labels and "I have this"
+
+`describeGaps` labels each gap:
+
+| Label | Meaning |
+|---|---|
+| **In profile** | You have it (by name, alias, or a built-in alias), just not on this resume. "AWS ECS" is in profile if your profile has "ECS". |
+| **Learning** | In your profile at the Learning level. |
+| **I have this** button | Not in your profile. Shown only where writes are allowed. |
+
+"I have this" opens a dialog with four answers, all posting to one action and validated by one Zod **discriminated union** on `mode`, so each answer checks exactly the fields it uses:
+
+- **"Same as <skill>"** (offered when a profile skill has a similar name, e.g. "Leaflet" for "Leaflet maps"): the gap's name becomes an alias of that skill. You decide, because a similar name can be a different skill.
+- **Add as a skill**, with category, levels, and an optional "where did you use it?".
+- **"No, but I'm learning it"**: a skill at the Learning level.
+- **Add as a highlight**, for gaps that aren't skills ("5+ years of experience").
+
+Every answer is recorded with `source = "gap"` and the job that prompted it. The data layer checks the job (and, for an alias, the skill) belongs to you rather than trusting the form, applies the same name-clash rules as the Profile page, and the isolation tests cover all of it.
+
+### Demo
+
+The Granite & Gale comparison now lists Python as a gap: the listing names it as a nice-to-have, and Alex's resume doesn't mention it, but Alex's profile has it (coursework). So the demo shows an "In profile" gap.

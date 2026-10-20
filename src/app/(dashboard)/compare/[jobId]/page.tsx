@@ -12,13 +12,18 @@ import {
 import { isWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
 import { getJobForComparison } from "@/server/db/comparisons";
-import { getActiveResume } from "@/server/db/resumes";
+import { getActiveResume, getResume } from "@/server/db/resumes";
+import { loadProfile } from "@/server/db/profile";
 import { getLatestComparison } from "@/server/comparisons";
 import { idSchema } from "@/lib/schemas/form";
 import type { Comparison } from "@/lib/schemas/comparison";
 import { scoreBand, type ScoreBand } from "@/lib/score-band";
 import { cn } from "@/lib/utils";
+import { createSkillResolver } from "@/lib/skills/resolver";
+import { describeGaps, type GapView } from "@/lib/skills/gaps";
+import { wordingNotes, type WordingNote } from "@/lib/skills/wording";
 import { RunComparisonButton } from "../_components/run-comparison-button";
+import { GapDialog } from "../_components/gap-dialog";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -39,11 +44,21 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
   const job = await getJobForComparison(parsedId.data);
   if (!job) notFound();
 
-  const [activeResume, latest] = await Promise.all([
+  const [activeResume, latest, profile] = await Promise.all([
     getActiveResume(),
     getLatestComparison(job.id),
+    loadProfile(),
   ]);
   const writable = isWritable();
+
+  // How the gaps relate to your profile, and where the listing and your
+  // resume name the same skill differently. Labels only: the score is for
+  // the resume as written and never changes because of the profile.
+  const resolver = createSkillResolver(profile.skills);
+  const comparedResume = latest ? await getResume(latest.resumeId) : undefined;
+  const categories = [
+    ...new Set(profile.skills.flatMap((skill) => (skill.category ? [skill.category] : []))),
+  ];
 
   // The first reason that applies is shown on the disabled button.
   const blocker = !writable
@@ -134,7 +149,15 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
             Compared {dateFormat.format(latest.createdAt)} against resume v
             {latest.resumeVersion} · {latest.model === "demo" ? "demo result" : latest.model}
           </p>
-          <ComparisonResult comparison={latest.comparison} />
+          <ComparisonResult
+            comparison={latest.comparison}
+            resumeVersion={latest.resumeVersion}
+            gaps={describeGaps(latest.comparison.missingSkills, profile.skills, resolver)}
+            notes={wordingNotes(latest.comparison.matchedSkills, comparedResume?.text ?? "", resolver)}
+            jobId={job.id}
+            writable={writable}
+            categories={categories}
+          />
         </>
       )}
     </div>
@@ -156,20 +179,40 @@ const TONE_CLASSES: Record<ScoreBand["tone"], string> = {
   poor: "text-rose-600 dark:text-rose-400",
 };
 
-function ComparisonResult({ comparison }: { comparison: Comparison }) {
+function ComparisonResult({
+  comparison,
+  resumeVersion,
+  gaps,
+  notes,
+  jobId,
+  writable,
+  categories,
+}: {
+  comparison: Comparison;
+  resumeVersion: number;
+  gaps: GapView[];
+  notes: WordingNote[];
+  jobId: number;
+  writable: boolean;
+  categories: string[];
+}) {
   const band = scoreBand(comparison.score);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
       <Card>
         <CardHeader>
-          <CardDescription>Match score</CardDescription>
+          <CardDescription>Match score for resume v{resumeVersion}</CardDescription>
           <CardTitle className={cn("text-5xl tabular-nums", TONE_CLASSES[band.tone])}>
             {comparison.score}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className={cn("font-medium", TONE_CLASSES[band.tone])}>{band.label}</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            For your resume as written, which is what an applicant tracking system sees. Your
+            profile isn&apos;t counted.
+          </p>
         </CardContent>
       </Card>
 
@@ -180,12 +223,7 @@ function ComparisonResult({ comparison }: { comparison: Comparison }) {
           items={comparison.matchedSkills}
           empty="None found."
         />
-        <SkillList
-          title="Gaps"
-          description="Asked for in the listing, not shown on your resume."
-          items={comparison.missingSkills}
-          empty="No gaps found."
-        />
+        <GapsCard gaps={gaps} jobId={jobId} writable={writable} categories={categories} />
         <SkillList
           title="Missing keywords"
           description="Terms from the listing that don't appear on your resume. Add only the ones that are true for you."
@@ -193,6 +231,7 @@ function ComparisonResult({ comparison }: { comparison: Comparison }) {
           empty="None."
           className="md:col-span-2"
         />
+        {notes.length > 0 && <WordingCard notes={notes} />}
       </div>
 
       <Card className="lg:col-span-2">
@@ -246,6 +285,75 @@ function SkillList({
             ))}
           </ul>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// The gaps, each labeled by how it relates to your profile. "I have this"
+// only appears where writes are allowed.
+function GapsCard({
+  gaps,
+  jobId,
+  writable,
+  categories,
+}: {
+  gaps: GapView[];
+  jobId: number;
+  writable: boolean;
+  categories: string[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Gaps</CardTitle>
+        <CardDescription>Asked for in the listing, not shown on your resume.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {gaps.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No gaps found.</p>
+        ) : (
+          <ul className="flex flex-wrap gap-2">
+            {gaps.map((gap) => (
+              <li key={gap.name} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm">
+                {gap.name}
+                {gap.status === "in_profile" && (
+                  <span className="text-xs text-primary" title="In your profile, just not on this resume">
+                    · In profile
+                  </span>
+                )}
+                {gap.status === "learning" && <span className="text-xs text-muted-foreground">· Learning</span>}
+                {gap.status === "absent" && writable && (
+                  <GapDialog jobId={jobId} name={gap.name} suggestions={gap.suggestions} categories={categories} />
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Matched skills your resume names differently from the listing.
+function WordingCard({ notes }: { notes: WordingNote[] }) {
+  return (
+    <Card className="md:col-span-2">
+      <CardHeader>
+        <CardTitle>Wording</CardTitle>
+        <CardDescription>
+          You have these skills, but some applicant tracking systems match keywords literally.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-1.5 text-sm">
+          {notes.map((note) => (
+            <li key={note.listingTerm}>
+              The listing says <strong>{note.listingTerm}</strong>; your resume says{" "}
+              <strong>{note.resumeTerm}</strong>. Consider using both.
+            </li>
+          ))}
+        </ul>
       </CardContent>
     </Card>
   );

@@ -35,6 +35,9 @@ const DEMO_TEX = fs.readFileSync(
 const ALICE = 1;
 const BOB = 2;
 
+// The current test database, typed (state.db is the same object, for the mocks).
+let testDb: ReturnType<typeof drizzle<typeof schema>>;
+
 function as(userId: number) {
   state.userId = userId;
 }
@@ -48,6 +51,7 @@ beforeEach(() => {
     { id: BOB, email: "bob@example.com" },
   ]).run();
   state.db = db;
+  testDb = db;
 });
 
 describe("saved jobs", () => {
@@ -224,5 +228,70 @@ describe("profile edits (Profile page)", () => {
     as(BOB);
     expect(await profileDal.importFromActiveResume()).toMatchObject({ ok: false });
     expect(await profileDal.loadProfile()).toEqual({ skills: [], entries: [], highlights: [] });
+  });
+});
+
+describe("comparison gaps and skill rows", () => {
+  async function aliceJobWithSkill() {
+    as(ALICE);
+    const job = await jobsDal.createSavedJob({ company: "Acme", title: "Engineer", listingText: "x" });
+    await profileDal.createSkill({ name: "PostgreSQL", aliases: [] });
+    const [skill] = (await profileDal.loadProfile()).skills;
+    return { job, skill };
+  }
+
+  it("records a confirmed gap as yours, sourced from the job", async () => {
+    const { job } = await aliceJobWithSkill();
+    expect((await profileDal.confirmGap({ mode: "learning", jobId: job.id, name: "Docker" })).ok).toBe(true);
+    expect((await profileDal.confirmGap({ mode: "highlight", jobId: job.id, text: "5+ years" })).ok).toBe(true);
+    const profile = await profileDal.loadProfile();
+    expect(profile.skills.find((s) => s.name === "Docker")).toMatchObject({
+      proficiency: "learning",
+      source: "gap",
+      sourceJobId: job.id,
+      userId: ALICE,
+    });
+    expect(profile.highlights[0]).toMatchObject({ text: "5+ years", source: "gap", sourceJobId: job.id });
+  });
+
+  it("adds a gap's name as an alias of your skill", async () => {
+    const { job, skill } = await aliceJobWithSkill();
+    expect((await profileDal.confirmGap({ mode: "alias", jobId: job.id, name: "Postgres", skillId: skill.id })).ok).toBe(true);
+    expect((await profileDal.loadProfile()).skills[0].aliases).toEqual(["Postgres"]);
+  });
+
+  it("refuses another user's job or skill", async () => {
+    const { job, skill } = await aliceJobWithSkill();
+    as(BOB);
+    const bobsJob = await jobsDal.createSavedJob({ company: "Globex", title: "Dev" });
+    // Alice's job as the source.
+    expect((await profileDal.confirmGap({ mode: "learning", jobId: job.id, name: "Docker" })).ok).toBe(false);
+    // Bob's own job, but Alice's skill as the alias target.
+    expect(
+      (await profileDal.confirmGap({ mode: "alias", jobId: bobsJob.id, name: "PG", skillId: skill.id })).ok,
+    ).toBe(false);
+    expect(await profileDal.loadProfile()).toEqual({ skills: [], entries: [], highlights: [] });
+    as(ALICE);
+    expect((await profileDal.loadProfile()).skills[0].aliases).toEqual([]);
+  });
+
+  it("saves a comparison's canonical skill rows, owned by the same user", async () => {
+    const { job } = await aliceJobWithSkill();
+    const resume = await resumesDal.createResumeVersion("alice", null);
+    const result = {
+      score: 70,
+      matchedSkills: ["Postgres", "React.js"],
+      missingSkills: ["k8s"],
+      missingKeywords: [],
+      suggestions: [],
+    };
+    const { id } = await comparisonsDal.insertComparison({ jobId: job.id, resumeId: resume.id, result, model: "demo" });
+
+    const rows = testDb.select().from(schema.comparisonSkills).all();
+    expect(rows.map((r) => [r.comparisonId, r.userId, r.skillKey, r.status])).toEqual([
+      [id, ALICE, "postgresql", "matched"],
+      [id, ALICE, "react", "matched"],
+      [id, ALICE, "kubernetes", "missing"],
+    ]);
   });
 });

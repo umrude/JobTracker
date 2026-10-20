@@ -14,6 +14,7 @@ import { DEMO_DB_PATH, DEMO_USER_EMAIL } from "@/server/db/paths";
 import type { Status } from "@/lib/schemas/status";
 import { DEMO_MODEL, getDemoComparison } from "@/server/llm/compare-demo";
 import { importProfileFromLatexInto, type ProfileDb } from "@/server/db/profile-store";
+import { insertComparisonWithSkills } from "@/server/db/comparison-store";
 import { skillKey } from "@/lib/comparison-helpers";
 import type { Experience, Proficiency } from "@/lib/schemas/profile";
 
@@ -548,16 +549,15 @@ export function seedDemoDatabase(): number {
     // One job is left uncompared on purpose, to demo the empty state (and,
     // in the writable local preview, running a comparison).
     if (activeResume && seedJob.url !== UNCOMPARED_SEED_JOB_URL) {
-      db.insert(schema.comparisons)
-        .values({
-          userId: demoUser.id,
+      // Through the same function as the app, so the demo also gets the
+      // normalized skill rows.
+      insertComparisonWithSkills(db, demoUser.id, {
           jobId: job.id,
           resumeId: activeResume.id,
           result: getDemoComparison(seedJob.url),
           model: DEMO_MODEL,
           createdAt: daysAgo(Math.max(seedJob.savedDaysAgo - 1, 0)),
-        })
-        .run();
+        });
     }
   }
 

@@ -83,6 +83,9 @@ export const DEMO_COMPARISONS: Record<string, ComparisonInput> = {
       "Kubernetes",
       "Terraform",
       "On-call ownership",
+      // A nice-to-have in the listing. Alex has Python in their profile
+      // (coursework) but not on the resume, so the demo shows "In profile".
+      "Python",
     ],
     missingKeywords: ["Go", "Kafka", "Flink", "ClickHouse", "Kubernetes", "Terraform", "distributed systems"],
     suggestions: [

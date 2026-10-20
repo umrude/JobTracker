@@ -28,7 +28,7 @@ import { DeleteButton } from "./_components/delete-button";
 import { EntryFields, SkillFields, TextFields } from "./_components/fields";
 import { ImportButton } from "./_components/import-button";
 import { ProfileDialog } from "./_components/profile-dialog";
-import { EXPERIENCE_LABELS, PROFICIENCY_LABELS, SOURCE_LABELS } from "./_components/labels";
+import { EXPERIENCE_LABELS, PROFICIENCY_LABELS, SOURCE_LABELS } from "@/lib/profile/labels";
 
 // The profile: everything you've done, which tailoring draws from. A
 // Server Component: the profile is read at render time, and only the

@@ -4,6 +4,7 @@ import { getDb } from "@/server/db/client";
 import { getMode } from "@/server/mode";
 import { requireUserId } from "@/server/current-user";
 import { comparisons, jobs, resumes } from "@/server/db/schema";
+import { insertComparisonWithSkills } from "@/server/db/comparison-store";
 import type { Comparison } from "@/lib/schemas/comparison";
 
 // Every query filters on the current user (requireUserId).
@@ -30,7 +31,8 @@ export async function getJobForComparison(id: number) {
 // comparisonSchema can be written. Reads get `unknown` back and must
 // re-validate (see the comment on comparisons.result in schema.ts). The
 // job and resume ids come from owner-scoped reads in runComparison; the
-// owner is stamped here, never taken from the caller.
+// owner is stamped here, never taken from the caller. The comparison's
+// normalized skill rows are saved with it (see comparison-store.ts).
 export async function insertComparison(input: {
   jobId: number;
   resumeId: number;
@@ -38,11 +40,7 @@ export async function insertComparison(input: {
   model: string;
 }) {
   const { db, userId } = await scope();
-  return db
-    .insert(comparisons)
-    .values({ ...input, userId })
-    .returning({ id: comparisons.id })
-    .get();
+  return insertComparisonWithSkills(db, userId, input);
 }
 
 const comparisonColumns = {

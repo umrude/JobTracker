@@ -84,3 +84,30 @@ export const updateHighlightSchema = z.object({ id: idSchema, text: highlightTex
 export type UpdateHighlightInput = z.infer<typeof updateHighlightSchema>;
 
 export const profileItemIdSchema = z.object({ id: idSchema });
+
+// "I have this" on a comparison gap (see docs/tailored-resumes.md,
+// "Comparison gaps"). A discriminated union on `mode`: each choice
+// validates exactly the fields it uses. jobId is the job whose comparison
+// showed the gap; it's recorded as the item's source.
+const gapName = z.string().trim().min(1, "Name is required").max(100, "Name must be 100 characters or fewer");
+
+export const confirmGapSchema = z.discriminatedUnion("mode", [
+  // "Yes, it's the same as <skill>": the gap's name becomes an alias.
+  z.object({ mode: z.literal("alias"), jobId: idSchema, name: gapName, skillId: idSchema }),
+  // "Add it as a skill".
+  z.object({
+    mode: z.literal("skill"),
+    jobId: idSchema,
+    name: gapName,
+    category: skillFields.category,
+    proficiency: skillFields.proficiency,
+    experience: skillFields.experience,
+    note: skillFields.note,
+  }),
+  // "No, but I'm learning it".
+  z.object({ mode: z.literal("learning"), jobId: idSchema, name: gapName, category: skillFields.category }),
+  // "Add it as a highlight", for gaps that aren't skills ("5+ years of experience").
+  z.object({ mode: z.literal("highlight"), jobId: idSchema, text: highlightText }),
+]);
+
+export type ConfirmGapInput = z.infer<typeof confirmGapSchema>;
