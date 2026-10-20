@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/saved", label: "Saved jobs" },
   { href: "/compare", label: "Compare" },
   { href: "/resume", label: "Resume" },
+  { href: "/profile", label: "Profile" },
 ] as const;
 
 // A Client Component only because it highlights the current page, which

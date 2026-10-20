@@ -177,3 +177,52 @@ describe("profile", () => {
     expect(await profileDal.loadProfile()).toEqual({ skills: [], entries: [], highlights: [] });
   });
 });
+
+describe("profile edits (Profile page)", () => {
+  it("can't edit or delete another user's skills, entries, bullets, or highlights", async () => {
+    as(ALICE);
+    await profileDal.importProfileFromLatex(DEMO_TEX);
+    await profileDal.createHighlight({ text: "Alice's highlight" });
+    const alice = await profileDal.loadProfile();
+    const skill = alice.skills[0];
+    const entry = alice.entries[0];
+    const bullet = entry.bullets[0];
+    const highlight = alice.highlights.at(-1);
+    if (!highlight) throw new Error("expected a highlight");
+
+    as(BOB);
+    expect((await profileDal.updateSkill({ id: skill.id, name: "Hacked", aliases: [] })).ok).toBe(false);
+    expect(
+      (await profileDal.updateEntry({ id: entry.id, section: "x", title: "Hacked", dates: "", subtitle: "", detail: "" })).ok,
+    ).toBe(false);
+    expect((await profileDal.updateBullet({ id: bullet.id, text: "Hacked" })).ok).toBe(false);
+    expect((await profileDal.updateHighlight({ id: highlight.id, text: "Hacked" })).ok).toBe(false);
+    // Adding a bullet to someone else's entry is refused, not silently attached.
+    expect((await profileDal.createBullet({ entryId: entry.id, text: "Injected" })).ok).toBe(false);
+    await profileDal.deleteSkill(skill.id);
+    await profileDal.deleteEntry(entry.id);
+    await profileDal.deleteBullet(alice.entries[1].bullets[0].id);
+    await profileDal.deleteHighlight(highlight.id);
+
+    as(ALICE);
+    expect(await profileDal.loadProfile()).toEqual(alice);
+  });
+
+  it("checks skill-name clashes per user, including aliases", async () => {
+    as(ALICE);
+    expect((await profileDal.createSkill({ name: "PostgreSQL", aliases: ["Postgres"] })).ok).toBe(true);
+    // Alice's own alias blocks the duplicate...
+    expect(await profileDal.createSkill({ name: "postgres", aliases: [] })).toMatchObject({ ok: false, field: "name" });
+    // ...but Bob's profile is separate.
+    as(BOB);
+    expect((await profileDal.createSkill({ name: "Postgres", aliases: [] })).ok).toBe(true);
+  });
+
+  it("imports from your own active resume, not someone else's", async () => {
+    as(ALICE);
+    await resumesDal.createResumeVersion("alice", DEMO_TEX);
+    as(BOB);
+    expect(await profileDal.importFromActiveResume()).toMatchObject({ ok: false });
+    expect(await profileDal.loadProfile()).toEqual({ skills: [], entries: [], highlights: [] });
+  });
+});

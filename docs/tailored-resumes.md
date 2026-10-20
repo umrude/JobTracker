@@ -8,7 +8,7 @@ How Phase 3 turns your resume into a version tailored to one job listing, withou
 | 2 | Parse the LaTeX into editable parts, and write edits back | Done |
 | 3 | Compile to PDF with Tectonic | Done |
 | 4a | Profile schema, and import from the .tex | Done |
-| 4b | Profile page: view and edit | Planned |
+| 4b | Profile page: view and edit | Done |
 | 4c | Skill names (aliases), comparison skill rows, "I have this" | Planned |
 | 5 | Tailoring with the LLM, checked in code, reviewed by you | Planned |
 | 6 | Cover letters from the tailored resume | Planned |
@@ -309,3 +309,39 @@ Alex's profile is the demo .tex imported with the app's own code, plus extras: P
 
 - Your resume would import completely: 43 skills in 5 categories, 5 entries, 10 bullets, and your summary's 4 sentences as highlights (counts only were printed).
 - The demo profile seeds as designed: 21 imported and 3 added skills, 6 linked entries plus 1 added, 10 imported and 3 added bullets, 4 highlights.
+
+## Step 4b: the Profile page
+
+Code: `src/app/(dashboard)/profile/` (the page, its actions, and four small components), write functions in `src/server/db/profile.ts`, form schemas in `src/lib/schemas/profile.ts`, and the "no context" check in `src/lib/profile/context.ts`.
+
+### What it shows
+
+- **Highlights**, **skills** grouped by category, and **entries** grouped by resume section, each entry with its bullets.
+- **Labels:** where an item came from ("Added", "From a comparison gap"; imported items are the default and aren't labeled), a skill's proficiency and experience, **"Not on resume"** for entries that aren't in your .tex, and **"No context"** for skills nothing backs up.
+- **"Import from active resume"**, with the outcome underneath ("Added 43 skills, 5 entries, 10 bullets, 4 highlights."). It's for a resume saved before the profile existed; it's safe to press any time, since imports only add.
+
+Everything can be added, edited, and deleted. Reordering isn't in this step: items keep the order they were added in, and drag-to-reorder is a follow-up.
+
+### "No context"
+
+A skill has context if you've written something showing where you used it: a note on the skill, or its name (or an alias) in a bullet, a highlight, or an entry's subtitle or detail (a project's tech line). `skillHasContext` checks this, matching **whole terms only**: "go" isn't found in "good", but "node.js" is found in "built node.js APIs". The boundaries are "not a letter or digit" rather than regex word boundaries, because skill names contain punctuation (`c++`, `c#`, `node.js`).
+
+It's deliberately strict. "axe-core" isn't counted as mentioned by "added axe checks to CI", because that's a different term. The fix is yours to choose: add a note, or add "axe" as an alias. Tailoring (Step 5) uses the same check, so what the label says is exactly what tailoring will do.
+
+### How the page is built
+
+**One Server Component page, three small Client Components.** The page reads the profile at render time and lays everything out. The client code is only what needs the browser:
+
+- `ProfileDialog`: one dialog for every form (add or edit a skill, entry, bullet, or highlight). It owns the open state, the pending state, and the errors; the form **fields come in as children**, rendered by the server page. So there's one dialog component instead of eight.
+- `DeleteButton`: a confirmation and a pending state.
+- `ImportButton`: shows the import's outcome.
+
+Inputs are plain HTML (`<input>`, native `<select>`, a `<datalist>` suggesting existing section names), so they submit with the form and need no client state.
+
+**One action builder, many actions.** Every profile form has the same shape: check the session, `assertWritable()`, validate with Zod, write, revalidate. `formAction(schema, write)` builds that once. A `"use server"` file may only export async functions, so each exported action is a one-line async function that delegates to it.
+
+**Errors come back as data.** A duplicate skill name (including a name that's already another skill's alias: "Postgres" when PostgreSQL lists it) returns a form error, so the dialog stays open with what you typed.
+
+### Ownership
+
+Every write goes through the user-scoped data layer, and the isolation tests cover them: another user can't edit or delete your skills, entries, bullets, or highlights, can't add a bullet to your entry (refused, not silently attached), and imports only read your own active resume. Name clashes are checked per user, so two users can both have "React".

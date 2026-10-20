@@ -13,6 +13,13 @@ export type FormState =
       fieldErrors: Partial<Record<string, string[]>>;
     };
 
+// For actions that report an outcome as a sentence rather than per-field
+// errors, e.g. "Added 12 skills and 3 entries."
+export type MessageState =
+  | { status: "idle" }
+  | { status: "success"; message: string }
+  | { status: "error"; message: string };
+
 export function validationError<T>(error: z.ZodError<T>): FormState {
   return {
     status: "error",

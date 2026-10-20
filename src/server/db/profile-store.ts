@@ -137,7 +137,7 @@ function applyImportPlan(db: ProfileDb, userId: number, plan: ImportPlan) {
   });
 }
 
-type Tx = Parameters<Parameters<ProfileDb["transaction"]>[0]>[0];
+export type Tx = Parameters<Parameters<ProfileDb["transaction"]>[0]>[0];
 
 function insertBullets(tx: Tx, userId: number, entryId: number, texts: string[], firstOrder: number) {
   texts.forEach((text, index) => {
@@ -147,7 +147,9 @@ function insertBullets(tx: Tx, userId: number, entryId: number, texts: string[],
   });
 }
 
-function nextSortOrder(
+// The next sort order for a new item: after everything the user already
+// has in that table. Shared with profile.ts.
+export function nextSortOrder(
   tx: Tx,
   table: typeof profileSkills | typeof profileEntries | typeof profileHighlights,
   userId: number,
