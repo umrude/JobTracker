@@ -9,6 +9,7 @@ import type {
   UpdateApplicationInput,
 } from "@/lib/schemas/application";
 import { canTransition, type Status } from "@/lib/schemas/status";
+import { nextPassedScreeningAt } from "@/lib/screening";
 
 // Every query filters on the current user (requireUserId), so an id from
 // a form or a drag-and-drop can only ever reach your own rows: someone
@@ -45,6 +46,7 @@ export async function createApplication(input: CreateApplicationInput) {
         company: input.company,
         title: input.title,
         url: input.url,
+        listingText: input.listingText,
       })
       .returning()
       .get();
@@ -56,6 +58,7 @@ export async function createApplication(input: CreateApplicationInput) {
         jobId: job.id,
         status: input.status,
         notes: input.notes,
+        passedScreeningAt: nextPassedScreeningAt(null, input.status, new Date(), input.passedScreening),
       })
       .returning()
       .get();
@@ -78,6 +81,7 @@ export async function updateApplication(input: UpdateApplicationInput) {
     if (input.company !== undefined) jobUpdates.company = input.company;
     if (input.title !== undefined) jobUpdates.title = input.title;
     if (input.url !== undefined) jobUpdates.url = input.url;
+    if (input.listingText !== undefined) jobUpdates.listingText = input.listingText.trim() === "" ? null : input.listingText;
     if (Object.keys(jobUpdates).length > 0) {
       tx.update(jobs)
         .set(jobUpdates)
@@ -90,6 +94,12 @@ export async function updateApplication(input: UpdateApplicationInput) {
     };
     if (input.notes !== undefined) applicationUpdates.notes = input.notes;
     if (input.status !== undefined) applicationUpdates.status = input.status;
+    applicationUpdates.passedScreeningAt = nextPassedScreeningAt(
+      existing.passedScreeningAt,
+      input.status ?? existing.status,
+      new Date(),
+      input.passedScreening,
+    );
 
     return tx
       .update(applications)
@@ -121,6 +131,7 @@ export async function moveApplicationStatus(id: number, status: Status) {
       .set({
         status,
         updatedAt: new Date(),
+        passedScreeningAt: nextPassedScreeningAt(existing.passedScreeningAt, status, new Date()),
         appliedAt:
           status === "applied" && !existing.appliedAt
             ? new Date()

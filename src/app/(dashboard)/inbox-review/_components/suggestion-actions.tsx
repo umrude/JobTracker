@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import type { MessageState } from "@/lib/form-state";
 import { STATUSES, STATUS_LABELS, type Status } from "@/lib/schemas/status";
 import { addAsApplicationAction, confirmSuggestionAction, dismissSuggestionAction, linkSuggestionAction } from "../actions";
@@ -164,6 +165,17 @@ export function AddApplicationForm({
       <div className="space-y-1">
         <Label htmlFor={`add-date-${id}`}>Applied on</Label>
         <Input id={`add-date-${id}`} name="appliedOn" type="date" defaultValue={appliedOn} required disabled={disabled} className="w-44" />
+      </div>
+      <div className="space-y-1 sm:col-span-2">
+        <Label htmlFor={`add-listing-${id}`}>Listing (optional)</Label>
+        <Textarea
+          id={`add-listing-${id}`}
+          name="listingText"
+          rows={3}
+          placeholder="Paste the job description, if you still have it"
+          disabled={disabled}
+        />
+        <p className="text-xs text-muted-foreground">Without it, this application can&apos;t be compared or counted in insights.</p>
       </div>
       <div className="flex items-center gap-3 sm:col-span-2">
         <Button type="submit" size="sm" disabled={disabled || pending}>

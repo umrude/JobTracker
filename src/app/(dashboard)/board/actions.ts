@@ -24,8 +24,10 @@ export async function addApplicationAction(formData: FormData) {
     company: formData.get("company"),
     title: formData.get("title"),
     url: formData.get("url"),
+    listingText: formData.get("listingText"),
     notes: formData.get("notes"),
     status: formData.get("status") || undefined,
+    passedScreening: formData.get("passedScreening") === "on",
   });
 
   await createApplication(input);
@@ -41,8 +43,13 @@ export async function editApplicationAction(formData: FormData) {
     company: formData.get("company"),
     title: formData.get("title"),
     url: formData.get("url"),
+    // Always sent by the edit form; blank clears it.
+    listingText: formData.get("listingText") ?? undefined,
     notes: formData.get("notes"),
     status: formData.get("status") || undefined,
+    // A checkbox sends nothing when unticked, and the edit form always has
+    // it, so absent means unticked.
+    passedScreening: formData.get("passedScreening") === "on",
   });
 
   await updateApplication(input);

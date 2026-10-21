@@ -163,6 +163,15 @@ describe("reviewing", () => {
     expect(dismissSuggestion(db, USER, ack.id, NOW).ok).toBe(false);
   });
 
+  it("records passing screening when an interview email is confirmed", async () => {
+    await run();
+    const interview = pendingFor("Interview invitation: Full-Stack Developer");
+    if (!interview) throw new Error("missing");
+    expect(confirmSuggestion(db, USER, interview.id, NOW)).toEqual({ ok: true, status: "interviewing" });
+    const app = db.select().from(schema.applications).all().find((a) => a.id === appIds.get("Driftwood Analytics"));
+    expect(app?.passedScreeningAt).toEqual(new Date(Math.floor(NOW.getTime() / 1000) * 1000));
+  });
+
   it("confirms a ghosted suggestion, and doesn't suggest it again after a dismissal", async () => {
     await run();
     const ghosted = pending().find((row) => row.source === "ghosted");

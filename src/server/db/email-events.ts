@@ -62,7 +62,7 @@ export async function link(id: number, target: LinkTarget): Promise<DecideResult
 
 export async function addAsApplication(
   id: number,
-  input: { company: string; title: string; status: Status; appliedAt: Date },
+  input: { company: string; title: string; status: Status; appliedAt: Date; listingText?: string | null },
 ): Promise<DecideResult> {
   const { db, userId } = await scope();
   return addApplicationFromSuggestion(db, userId, id, input);

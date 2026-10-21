@@ -30,6 +30,7 @@ import { checkProposal } from "@/lib/tailoring/check";
 import { skillKey } from "@/lib/comparison-helpers";
 import type { Experience, Proficiency } from "@/lib/schemas/profile";
 import { defaultSyncStart } from "@/lib/email/sync-window";
+import { statusImpliesScreening } from "@/lib/screening";
 import { earliestAppliedAt } from "@/server/db/gmail-store";
 import { demoMailSource } from "@/server/gmail/demo-source";
 import { syncInbox } from "@/server/gmail/sync";
@@ -77,6 +78,10 @@ type SeedJob = {
 type SeedApplication = SeedJob & {
   status: Status;
   appliedDaysAgo?: number;
+  // When it got past screening, if known. Interviewing and Offer imply it
+  // (set from the applied date when not given); a rejection after an
+  // interview, like Ironclad's, says so explicitly.
+  passedScreeningDaysAgo?: number;
 };
 
 // A fake resume for a fictional person; never put real resume text here.
@@ -364,6 +369,7 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     savedDaysAgo: 45,
     status: "rejected",
     appliedDaysAgo: 43,
+    passedScreeningDaysAgo: 38,
     notes: "Passed after the final round; team went with an internal candidate.",
   },
   {
@@ -692,6 +698,12 @@ export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<n
         // Last changed when applied, not "now": the ghosted rule counts a
         // recent change as activity.
         updatedAt: daysAgo(seedApp.appliedDaysAgo ?? seedApp.savedDaysAgo),
+        passedScreeningAt:
+          seedApp.passedScreeningDaysAgo !== undefined
+            ? daysAgo(seedApp.passedScreeningDaysAgo)
+            : statusImpliesScreening(seedApp.status)
+              ? daysAgo(Math.max((seedApp.appliedDaysAgo ?? 0) - 5, 0))
+              : null,
         notes: seedApp.notes,
       })
       .run();

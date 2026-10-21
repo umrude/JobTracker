@@ -11,6 +11,8 @@ import { chooseSyncStart, removeGmailConnection } from "@/server/db/gmail-connec
 import { addAsApplication, confirm, dismiss, link } from "@/server/db/email-events";
 import type { DecideResult, LinkTarget } from "@/server/db/email-event-store";
 import { statusSchema } from "@/lib/schemas/status";
+import { optionalText } from "@/lib/schemas/form";
+import { LISTING_TEXT_MAX } from "@/lib/schemas/job";
 import {
   GMAIL_CALLBACK_PATH,
   GMAIL_OAUTH_COOKIE,
@@ -103,6 +105,8 @@ const addFromEmailSchema = suggestionIdSchema.extend({
   status: statusSchema,
   // <input type="date"> sends "YYYY-MM-DD".
   appliedOn: z.iso.date({ error: "Pick the date you applied." }),
+  // Optional, but without it the application can't count in insights.
+  listingText: optionalText(LISTING_TEXT_MAX, "The listing is too long."),
 });
 
 async function decide(run: () => Promise<DecideResult>, success: string): Promise<MessageState> {
@@ -144,9 +148,9 @@ export async function addAsApplicationAction(_prev: MessageState, formData: Form
     const [first] = Object.values(z.flattenError(parsed.error).fieldErrors).flat();
     return { status: "error", message: first ?? "Check the form." };
   }
-  const { id, company, title, status, appliedOn } = parsed.data;
+  const { id, company, title, status, appliedOn, listingText } = parsed.data;
   return decide(
-    () => addAsApplication(id, { company, title, status, appliedAt: new Date(`${appliedOn}T12:00:00Z`) }),
+    () => addAsApplication(id, { company, title, status, listingText, appliedAt: new Date(`${appliedOn}T12:00:00Z`) }),
     "Added to the board.",
   );
 }

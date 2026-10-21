@@ -1,10 +1,11 @@
 // No "server-only" here, like profile-store.ts: the seed uses it with its
 // own connection. Every function takes the database and owner as arguments.
 // The app reaches it through comparisons.ts, which passes requireUserId().
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/server/db/schema";
-import { comparisonSkills, comparisons, profileSkills } from "@/server/db/schema";
+import { comparisonSkills, comparisons, jobs, profileSkills } from "@/server/db/schema";
+import { listingHash } from "@/lib/listing";
 import type { Comparison } from "@/lib/schemas/comparison";
 import { createSkillResolver, type SkillResolver } from "@/lib/skills/resolver";
 import { comparisonSkillRows } from "@/lib/skills/comparison-rows";
@@ -21,6 +22,18 @@ export function skillResolverFor(db: AppDb, userId: number): SkillResolver {
   return createSkillResolver(skills);
 }
 
+// The fingerprint of the job's listing as it is now, stored with each
+// comparison (see lib/listing.ts). Read here rather than passed in, so no
+// caller can forget it or pass the wrong text.
+function currentListingHash(db: AppDb, userId: number, jobId: number): string | null {
+  const job = db
+    .select({ listingText: jobs.listingText })
+    .from(jobs)
+    .where(and(eq(jobs.id, jobId), eq(jobs.userId, userId)))
+    .get();
+  return listingHash(job?.listingText);
+}
+
 // Saves a comparison of an approved tailored resume. No skill rows: the
 // resume was written toward this listing, so its matches would inflate the
 // Phase 5 skill-gap recap, which should count your resume as written.
@@ -31,7 +44,7 @@ export function insertTailoredComparisonRow(
 ): { id: number } {
   return db
     .insert(comparisons)
-    .values({ ...input, userId })
+    .values({ ...input, userId, listingHash: currentListingHash(db, userId, input.jobId) })
     .returning({ id: comparisons.id })
     .get();
 }
@@ -44,10 +57,11 @@ export function insertComparisonWithSkills(
   input: { jobId: number; resumeId: number; result: Comparison; model: string; createdAt?: Date },
 ): { id: number } {
   const resolver = skillResolverFor(db, userId);
+  const hash = currentListingHash(db, userId, input.jobId);
   return db.transaction((tx) => {
     const saved = tx
       .insert(comparisons)
-      .values({ ...input, userId })
+      .values({ ...input, userId, listingHash: hash })
       .returning({ id: comparisons.id })
       .get();
     const rows = comparisonSkillRows(input.result, resolver);

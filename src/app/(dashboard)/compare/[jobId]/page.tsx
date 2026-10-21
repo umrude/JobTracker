@@ -16,6 +16,7 @@ import { getJobForComparison } from "@/server/db/comparisons";
 import { getActiveResume, getResume } from "@/server/db/resumes";
 import { loadProfile } from "@/server/db/profile";
 import { getLatestComparison } from "@/server/comparisons";
+import { listingChangedSince } from "@/lib/listing";
 import { idSchema } from "@/lib/schemas/form";
 import type { Comparison } from "@/lib/schemas/comparison";
 import { scoreBand, type ScoreBand } from "@/lib/score-band";
@@ -120,10 +121,16 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
 
       {!job.listingText && (
         <Notice>
-          This job has no listing text, so there&apos;s nothing to compare.{" "}
+          This job has no listing text, so there&apos;s nothing to compare, and it isn&apos;t
+          counted in insights. Add it on the{" "}
           <Link href="/saved" className="underline underline-offset-4">
-            Add it on the Saved jobs page.
+            Saved jobs page
           </Link>
+          , or edit the application on the{" "}
+          <Link href="/board" className="underline underline-offset-4">
+            board
+          </Link>
+          .
         </Notice>
       )}
       {!activeResume && (
@@ -132,6 +139,12 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
           <Link href="/resume" className="underline underline-offset-4">
             Upload one first.
           </Link>
+        </Notice>
+      )}
+      {latest && job.listingText && listingChangedSince(latest.listingHash, job.listingText) && (
+        <Notice>
+          The listing changed since this comparison. Re-run to compare against the current text; until
+          then, insights keep counting this one.
         </Notice>
       )}
       {stale && activeResume && (

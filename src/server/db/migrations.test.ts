@@ -110,3 +110,32 @@ describe("migration 0005 (multi-user ready)", () => {
     ).toThrow(/UNIQUE/);
   });
 });
+
+describe("migrations 0012 and 0013", () => {
+  it("0012 adds email_events.job_id with ON DELETE cascade", () => {
+    const sqlite = new Database(":memory:");
+    migrate(drizzle(sqlite), { migrationsFolder: MIGRATIONS });
+    const foreignKeys = sqlite.prepare("pragma foreign_key_list(email_events)").all() as { from: string; on_delete: string }[];
+    expect(foreignKeys.find((fk) => fk.from === "job_id")?.on_delete).toBe("CASCADE");
+  });
+
+  it("0013 marks existing interviews and offers as past screening, and leaves the rest unknown", () => {
+    const sqlite = new Database(":memory:");
+    const db = drizzle(sqlite);
+    migrate(db, { migrationsFolder: migrationsUpTo(13) }); // 0000 to 0012
+    sqlite.exec(`
+      insert into users (id, email) values (1, 'a@example.com');
+      insert into jobs (id, user_id, company, title) values (1, 1, 'Acme', 'Engineer');
+      insert into applications (user_id, job_id, status, updated_at) values
+        (1, 1, 'interviewing', 1000), (1, 1, 'offer', 2000), (1, 1, 'rejected', 3000), (1, 1, 'applied', 4000);
+    `);
+    migrate(db, { migrationsFolder: MIGRATIONS });
+    const rows = sqlite.prepare("select status, passed_screening_at as passed from applications order by id").all();
+    expect(rows).toEqual([
+      { status: "interviewing", passed: 1000 },
+      { status: "offer", passed: 2000 },
+      { status: "rejected", passed: null },
+      { status: "applied", passed: null },
+    ]);
+  });
+});

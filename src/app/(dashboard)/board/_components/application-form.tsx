@@ -78,7 +78,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
       >
         <DialogTrigger render={props.trigger} />
       </MaybeDisabledTooltip>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {props.mode === "add" ? "Add application" : "Edit application"}
@@ -122,6 +122,21 @@ export function ApplicationForm(props: ApplicationFormProps) {
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="listingText">Listing (optional)</Label>
+            <Textarea
+              id="listingText"
+              name="listingText"
+              rows={4}
+              placeholder="Paste the job description"
+              defaultValue={application?.job.listingText ?? ""}
+              className="max-h-48"
+            />
+            <p className="text-xs text-muted-foreground">
+              Needed to compare it and count it in insights. If you no longer have
+              the listing, leave it blank: it&apos;s simply left out.
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="status">Status</Label>
             <Select
               name="status"
@@ -140,6 +155,21 @@ export function ApplicationForm(props: ApplicationFormProps) {
               </SelectContent>
             </Select>
           </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="passedScreening"
+              defaultChecked={application?.passedScreeningAt != null}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            <span>
+              Passed screening
+              <span className="block text-xs text-muted-foreground">
+                It reached a person: &quot;Under Consideration&quot; in the portal, or an
+                interview (set automatically). Leave it unticked if you don&apos;t know.
+              </span>
+            </span>
+          </label>
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea

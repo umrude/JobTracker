@@ -9,6 +9,7 @@ import { applications, emailEvents, jobs } from "@/server/db/schema";
 import { proposeForSavedJob, proposeStatus } from "@/lib/email/propose";
 import type { GhostedInput } from "@/lib/email/ghosted";
 import type { Status } from "@/lib/schemas/status";
+import { nextPassedScreeningAt } from "@/lib/screening";
 import type { EmailType } from "@/lib/schemas/email";
 
 type AppDb = BetterSQLite3Database<typeof schema>;
@@ -290,6 +291,7 @@ export function confirmSuggestion(db: AppDb, userId: number, id: number, now = n
             jobId: job.id,
             status,
             appliedAt: event.receivedAt ?? now,
+            passedScreeningAt: nextPassedScreeningAt(null, status, now),
             notes: job.notes?.trim() ? job.notes : null,
             createdAt: now,
             updatedAt: now,
@@ -304,7 +306,7 @@ export function confirmSuggestion(db: AppDb, userId: number, id: number, now = n
 
     if (applicationId === null) return { ok: false, message: "Link it to an application first." };
     const app = tx
-      .select({ status: applications.status })
+      .select({ status: applications.status, passedScreeningAt: applications.passedScreeningAt })
       .from(applications)
       .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
       .get();
@@ -314,7 +316,7 @@ export function confirmSuggestion(db: AppDb, userId: number, id: number, now = n
     if (!status) return { ok: false, message: "There's nothing to change any more: the application has moved on. Dismiss it instead." };
 
     tx.update(applications)
-      .set({ status, updatedAt: now })
+      .set({ status, updatedAt: now, passedScreeningAt: nextPassedScreeningAt(app.passedScreeningAt, status, now) })
       .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
       .run();
     markConfirmed(applicationId, status);
@@ -384,7 +386,7 @@ export function addApplicationFromSuggestion(
   db: AppDb,
   userId: number,
   id: number,
-  input: { company: string; title: string; status: Status; appliedAt: Date },
+  input: { company: string; title: string; status: Status; appliedAt: Date; listingText?: string | null },
   now = new Date(),
 ): DecideResult {
   return db.transaction((tx) => {
@@ -400,12 +402,27 @@ export function addApplicationFromSuggestion(
 
     const job = tx
       .insert(jobs)
-      .values({ userId, company: input.company, title: input.title, source: "Email", savedAt: input.appliedAt })
+      .values({
+        userId,
+        company: input.company,
+        title: input.title,
+        listingText: input.listingText ?? null,
+        source: "Email",
+        savedAt: input.appliedAt,
+      })
       .returning({ id: jobs.id })
       .get();
     const app = tx
       .insert(applications)
-      .values({ userId, jobId: job.id, status: input.status, appliedAt: input.appliedAt, createdAt: now, updatedAt: now })
+      .values({
+        userId,
+        jobId: job.id,
+        status: input.status,
+        appliedAt: input.appliedAt,
+        passedScreeningAt: nextPassedScreeningAt(null, input.status, now),
+        createdAt: now,
+        updatedAt: now,
+      })
       .returning({ id: applications.id })
       .get();
     tx.update(emailEvents)

@@ -522,3 +522,29 @@ describe("email suggestions", () => {
     expect(app.status).toBe("interviewing");
   });
 });
+
+describe("listings and screening on applications", () => {
+  it("adds, edits, and clears a listing, and records screening, only on your own", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied", listingText: "Build things." });
+    await applicationsDal.updateApplication({ id: app.id, passedScreening: true });
+    let [mine] = await applicationsDal.listApplicationsWithJob();
+    expect(mine.job.listingText).toBe("Build things.");
+    expect(mine.passedScreeningAt).not.toBeNull();
+
+    as(BOB);
+    await expect(applicationsDal.updateApplication({ id: app.id, listingText: "Hacked", passedScreening: false })).rejects.toThrow(/not found/);
+
+    as(ALICE);
+    // A blank listing clears it; unticking clears screening.
+    await applicationsDal.updateApplication({ id: app.id, listingText: "  ", passedScreening: false });
+    [mine] = await applicationsDal.listApplicationsWithJob();
+    expect(mine.job.listingText).toBeNull();
+    expect(mine.passedScreeningAt).toBeNull();
+    // Reaching Interviewing sets it, and unticking can't undo that.
+    await applicationsDal.moveApplicationStatus(app.id, "interviewing");
+    await applicationsDal.updateApplication({ id: app.id, passedScreening: false });
+    [mine] = await applicationsDal.listApplicationsWithJob();
+    expect(mine.passedScreeningAt).not.toBeNull();
+  });
+});

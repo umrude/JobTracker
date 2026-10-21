@@ -24,6 +24,8 @@ type StoredMeta = {
   resumeId: number;
   resumeVersion: number;
   model: string;
+  // The fingerprint of the listing it compared (lib/listing.ts).
+  listingHash: string | null;
   createdAt: Date;
 };
 
@@ -40,6 +42,7 @@ function toStoredComparison(row: ComparisonRow): StoredComparison {
     resumeId: row.resumeId,
     resumeVersion: row.resumeVersion,
     model: row.model,
+    listingHash: row.listingHash,
     createdAt: row.createdAt,
   };
   const parsed = comparisonSchema.safeParse(row.result);
@@ -87,7 +90,7 @@ export async function runComparison(jobId: number): Promise<RunComparisonResult>
       ok: false,
       error: {
         kind: "no_listing_text",
-        message: "This job has no listing text yet. Add it on the Saved jobs page first.",
+        message: "This job has no listing text yet. Add it on the Saved jobs page, or edit the application on the board.",
       },
     };
   }

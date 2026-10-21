@@ -74,6 +74,11 @@ export const applications = sqliteTable(
       .references(() => jobs.id, { onDelete: "cascade" }),
     status: text("status", { enum: STATUSES }).notNull().default("applied"),
     appliedAt: integer("applied_at", { mode: "timestamp" }),
+    // When you learned it got past screening to a person ("Under
+    // Consideration" in the portal), or when it reached Interviewing or
+    // Offer, which imply it. Null means unknown, not "failed": you rarely
+    // learn that an application didn't pass. See docs/insights.md.
+    passedScreeningAt: integer("passed_screening_at", { mode: "timestamp" }),
     notes: text("notes"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
@@ -141,6 +146,10 @@ export const comparisons = sqliteTable(
     // Which model produced this result ("demo" for canned fixtures), so old
     // results stay traceable after a model change.
     model: text("model").notNull(),
+    // A fingerprint of the listing text this compared (listingHash), so a
+    // later edit to the listing shows "changed since this comparison".
+    // Null for comparisons made before it existed: unknown, no note.
+    listingHash: text("listing_hash"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

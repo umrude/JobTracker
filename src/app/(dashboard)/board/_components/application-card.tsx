@@ -66,8 +66,25 @@ export function ApplicationCard({
           />
         </CardAction>
       </CardHeader>
-      <CardContent className="px-3 text-xs text-muted-foreground">
-        {application.job.company}
+      <CardContent className="space-y-1.5 px-3 text-xs text-muted-foreground">
+        <p>{application.job.company}</p>
+        {(application.passedScreeningAt || !application.job.listingText) && (
+          <p className="flex flex-wrap gap-1">
+            {application.passedScreeningAt && (
+              <span className="rounded-full border px-1.5 py-px">Passed screening</span>
+            )}
+            {!application.job.listingText && (
+              // A title, not a tooltip component: it's a quiet hint on a
+              // draggable card, and native titles don't fight the drag.
+              <span
+                className="rounded-full border border-dashed px-1.5 py-px"
+                title="No listing: it can't be compared or counted in insights. Edit to add it."
+              >
+                No listing
+              </span>
+            )}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

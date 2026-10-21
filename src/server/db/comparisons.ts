@@ -50,6 +50,7 @@ const comparisonColumns = {
   resumeVersion: resumes.version,
   result: comparisons.result,
   model: comparisons.model,
+  listingHash: comparisons.listingHash,
   createdAt: comparisons.createdAt,
 };
 
