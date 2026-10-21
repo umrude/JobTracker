@@ -44,12 +44,14 @@ export function buildApproval(input: {
   return finish(final, input.profile, input.tex, input.latexSource);
 }
 
-// Removes bullets to fit one page, from an already-approved resume. Works
+// Removes bullets (and whole entries) to fit one page, from an already-
+// approved resume. Works
 // on the full resume (approved sections plus the untouched ones), so any
 // bullet can be removed, but never an entry's last one.
 export function trimApproval(input: {
   final: TailoringProposal;
   removeBulletIds: readonly string[];
+  removeEntryIds?: readonly string[];
   profile: Profile;
   tex: ParsedResumeLatex;
   latexSource: string;
@@ -72,22 +74,32 @@ export function trimApproval(input: {
     return { ok: false, message: "Your profile changed since this was approved. Generate a new version to trim it." };
   }
 
-  // The full resume: approved sections replace their originals.
-  const approvedByTitle = new Map(input.final.sections.map((s) => [s.section.toLowerCase(), s]));
-  const merged = [
-    ...current.proposal.sections.map((s) => approvedByTitle.get(s.section.toLowerCase()) ?? s),
-    ...input.final.sections.filter((s) => s.isNew),
-  ];
   const remove = new Set(input.removeBulletIds);
-  const sections = merged.map((section) => ({
-    ...section,
-    entries: section.entries.map((entry) => {
-      const kept = entry.bullets.filter((b) => !remove.has(b.bulletId));
-      return { ...entry, bullets: kept.length > 0 ? kept : entry.bullets };
-    }),
-  }));
+  const removeEntries = new Set(input.removeEntryIds ?? []);
+  const sections = mergedSections(current.proposal, input.final).map((section) => {
+    // Never a section's last entry: an empty section breaks the PDF.
+    const keptEntries = section.entries.filter((entry) => !removeEntries.has(entry.entryId));
+    return {
+      ...section,
+      entries: (keptEntries.length > 0 ? keptEntries : section.entries).map((entry) => {
+        const kept = entry.bullets.filter((b) => !remove.has(b.bulletId));
+        return { ...entry, bullets: kept.length > 0 ? kept : entry.bullets };
+      }),
+    };
+  });
+  const keptBullets = new Set(sections.flatMap((s) => s.entries.flatMap((e) => e.bullets.map((b) => b.bulletId))));
 
-  return finish({ ...input.final, sections, trimOrder: input.final.trimOrder.filter((id) => !remove.has(id)) }, input.profile, input.tex, input.latexSource);
+  return finish({ ...input.final, sections, trimOrder: input.final.trimOrder.filter((id) => keptBullets.has(id)) }, input.profile, input.tex, input.latexSource);
+}
+
+// The full approved resume, section by section: approved sections replace
+// their originals, untouched ones stay, new ones follow.
+export function mergedSections(current: TailoringProposal, final: TailoringProposal): TailoringProposal["sections"] {
+  const approvedByTitle = new Map(final.sections.map((s) => [s.section.toLowerCase(), s]));
+  return [
+    ...current.sections.map((s) => approvedByTitle.get(s.section.toLowerCase()) ?? s),
+    ...final.sections.filter((s) => s.isNew),
+  ];
 }
 
 function finish(

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { assertWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
-import { approveTailoring, runTailoring, trimTailoring } from "@/server/tailoring";
+import { approveTailoring, editTailoring, previewTailoringLength, reviseTailoring, runTailoring, trimTailoring } from "@/server/tailoring";
+import { decisionsSchema, reviewEditSchema, revisionRequestSchema } from "@/lib/schemas/tailoring";
 import { generateCoverLetter, updateCoverLetter } from "@/server/cover-letters";
 import { runTailoredComparison } from "@/server/comparisons";
 import { idSchema } from "@/lib/schemas/form";
@@ -109,11 +110,11 @@ export async function trimTailoringAction(_prevState: MessageState, formData: Fo
   assertWritable();
 
   const parsed = z
-    .object({ tailoringId: idSchema, jobId: idSchema, bulletIds: idList })
+    .object({ tailoringId: idSchema, jobId: idSchema, bulletIds: idList, entryIds: idList.optional() })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { status: "error", message: "Invalid request. Reload the page and try again." };
 
-  const result = await trimTailoring(parsed.data.tailoringId, parsed.data.bulletIds);
+  const result = await trimTailoring(parsed.data.tailoringId, parsed.data.bulletIds, parsed.data.entryIds ?? []);
   if (!result.ok) return { status: "error", message: result.message };
 
   revalidatePath(`/apply/${parsed.data.jobId}`);
@@ -121,4 +122,99 @@ export async function trimTailoringAction(_prevState: MessageState, formData: Fo
     status: "success",
     message: result.warning ?? (result.pages === 1 ? "Trimmed: it fits on one page now." : `Trimmed: ${result.pages ?? "?"} pages.`),
   };
+}
+
+// ---- Editing a draft yourself, and checking its length ----
+
+// A JSON form field, parsed and then validated by `schema`.
+function jsonField<T extends z.ZodType>(schema: T) {
+  return z
+    .string()
+    .transform((value, ctx) => {
+      try {
+        return JSON.parse(value) as unknown;
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Invalid JSON" });
+        return z.NEVER;
+      }
+    })
+    .pipe(schema);
+}
+
+const editRequestSchema = z.union([
+  z.object({ edit: reviewEditSchema }),
+  z.object({ reset: z.string().max(200) }),
+  z.object({ resetAll: z.literal(true) }),
+]);
+
+// One edit (reword, remove, move), a reset of one item, or a reset of all.
+// The page sends its current decisions with it, so they're saved too.
+export async function editTailoringAction(_prevState: MessageState, formData: FormData): Promise<MessageState> {
+  await requireSession();
+  assertWritable();
+
+  const parsed = z
+    .object({
+      tailoringId: idSchema,
+      jobId: idSchema,
+      request: jsonField(editRequestSchema),
+      decisions: jsonField(decisionsSchema),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    // A text edit's own message ("The text can't be empty.") is worth showing.
+    const textProblem = parsed.error.issues.find((issue) => issue.path.includes("text"))?.message;
+    return { status: "error", message: textProblem ?? "Invalid edit. Reload the page and try again." };
+  }
+
+  const result = await editTailoring(parsed.data.tailoringId, parsed.data.request, parsed.data.decisions);
+  if (!result.ok) return { status: "error", message: result.message };
+
+  revalidatePath(`/apply/${parsed.data.jobId}`);
+  return { status: "success", message: "Saved." };
+}
+
+// "Check length": builds the PDF for what you've accepted so far, saving
+// nothing. A read, so it's allowed in the read-only demo (which can only
+// answer for pre-built PDFs).
+// The page count is returned as data too, so a revision can pass it on.
+export type LengthState = { status: "idle" } | { status: "done"; fits: boolean; message: string; pages: number | null };
+
+export async function checkTailoringLengthAction(_prevState: LengthState, formData: FormData): Promise<LengthState> {
+  await requireSession();
+
+  const parsed = z.object({ tailoringId: idSchema, accepted: idList }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { status: "done", fits: false, pages: null, message: "Invalid request. Reload the page and try again." };
+
+  const result = await previewTailoringLength(parsed.data.tailoringId, parsed.data.accepted);
+  if (!result.ok) return { status: "done", fits: false, pages: null, message: result.message };
+  return {
+    status: "done",
+    fits: result.pages === 1,
+    pages: result.pages,
+    message: result.pages === 1 ? "Fits on one page." : `${result.pages} pages with these choices.`,
+  };
+}
+
+// "Revise with notes": a new draft version that follows your notes. Can
+// take up to a minute in live mode, like generating.
+export async function reviseTailoringAction(_prevState: MessageState, formData: FormData): Promise<MessageState> {
+  await requireSession();
+  assertWritable();
+
+  const parsed = z
+    .object({
+      tailoringId: idSchema,
+      jobId: idSchema,
+      request: jsonField(revisionRequestSchema),
+      decisions: jsonField(decisionsSchema),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { status: "error", message: "Invalid notes. Keep each note under 1,000 characters and try again." };
+
+  const result = await reviseTailoring(parsed.data.tailoringId, parsed.data.request, parsed.data.decisions);
+  if (!result.ok) return { status: "error", message: result.message };
+
+  revalidatePath(`/apply/${parsed.data.jobId}`);
+  return { status: "success", message: "Revised. Review what changed below." };
 }

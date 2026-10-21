@@ -569,3 +569,75 @@ The text compared is the tailored resume exactly as its PDF shows it, rebuilt fr
 **The migration was hand-edited again.** drizzle-kit generated `ALTER TABLE ... ADD tailoring_id ... REFERENCES ...` without `ON DELETE cascade` (the same problem as migration 0005). Here no rebuild was needed: SQLite allows adding a nullable foreign-key column with a NULL default, cascade included. A migration test checks the cascade is there.
 
 **Demo:** the gains are deliberately modest. Bramblewood rises from 58 to 66 because the guild bullet now covers teaching accessibility, but screen-reader testing and WCAG audits stay gaps.
+
+## After Phase 3: editing and revising a draft
+
+Two ways to shape a draft before approving it, besides accept and reject:
+
+- **Edit it yourself:** quick and free, no model call.
+- **Revise with notes:** for anything easier to describe than to do. One model call makes a new version.
+
+A full resume builder (editing layout, fonts, and section order) was considered and left out. It would mean generating LaTeX instead of editing your `.tex`, and it would blur the split that keeps tailoring safe: **the profile owns content, the `.tex` owns layout**.
+
+### Editing it yourself
+
+Your edits are a list of small operations stored on the draft (`user_edits_json`), replayed on top of the checked proposal, which is never overwritten (`lib/tailoring/edits.ts`):
+
+| Edit | Where |
+|---|---|
+| Your own wording for the summary or any bullet | **Edit** on a change card, or ✎ in the outline |
+| Remove an entry or a bullet | ✕ in the outline |
+| Move an entry or a bullet up or down | ↑ ↓ in the outline |
+| Reset one item, back to the suggestion | **Reset** on the card or in the outline |
+
+Review then lists the differences between your current resume and the edited draft, exactly as before. So accept and reject, approval, the LaTeX edits, and the PDF all work unchanged.
+
+The **outline** ("Edit the resume yourself") shows the whole proposed resume with every change applied. It's for things the change list can't express: removing a project the model didn't touch, or rewording any bullet. It refuses edits that would break the PDF, like removing the only entry in a section or the only bullet of an entry.
+
+**Your edits count as accepted:** you made them. A reset puts the suggestion back, undecided. Your decisions are saved with each edit (`decisions_json`), so they survive the page reloading. `carryDecisions` keeps a decision only while its change still says the same thing.
+
+**Your wording is yours, but it's checked.** The honesty checker's rules are for the model, and it reverts the model's text when it breaks them. Your own text is never reverted (`resolution: "kept_yours"`), but `checkYourText` flags anything your profile doesn't back:
+
+- a number that isn't in your profile ("40%");
+- a skill that isn't in it;
+- a skill it marks as Learning.
+
+The flag suggests adding it to your profile if it's true. The profile is what keeps every future tailoring honest, so that's where facts belong.
+
+### Checking length before approving
+
+**Check length** builds the PDF for the changes you've accepted so far, and saves nothing. "Fits on one page" or "2 pages with these choices" tells you whether to cut something before you approve.
+
+After approval, **Trim** can now remove a whole entry as well as bullets. It never removes a section's only entry.
+
+In the read-only public demo there's no TeX engine, so only the pre-built PDFs can be measured.
+
+### Revising with notes
+
+Any change card has **Suggest a change** ("keep this, but drop the last sentence"), and there's a note for the whole draft ("this runs to two pages; drop WisePub rather than Stock Scanner"). **Revise with N notes** sends them in one model call, the same request as generating plus a revision block (`buildTailorRequest`) containing:
+
+- the draft as you see it, your edits included;
+- your decisions so far. Rejected changes aren't brought back unless a note asks.
+- each note with what that change says now;
+- the page count from your last length check, so "one page" can be followed;
+- your own wording, kept as it is unless a note asks to change it.
+
+The result goes through **the same honesty checker** as any proposal. A note can't add a fact: the model is told to leave it out and say so in the rationale, and the checker reverts it if it tries anyway.
+
+The revision is saved as a **new draft version** (`revised_from_id`, with your overall note), so the old version stays in the history. Carried over:
+
+- your wording, except on items a note asked to change;
+- your decisions, for changes that read the same as before. Anything new or different waits for you.
+
+**Demo mode** can't read notes, since it never calls the model. A revision there makes a new version labeled as such, to show how one arrives.
+
+### Tests
+
+- `edits.test.ts` covers every edit on the demo resume and profile:
+  - edited drafts still approve to valid LaTeX;
+  - refusals for edits that would break the PDF;
+  - the flags on your own wording;
+  - decisions carried over.
+- `approve.test.ts` covers removing whole entries.
+- `tailor.test.ts` covers the revision request.
+- `isolation.test.ts` checks that edits, decisions, and revisions only ever touch your own drafts, and walks a revision end to end in demo mode.

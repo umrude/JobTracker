@@ -7,9 +7,10 @@ import {
   latestApprovedTailoringRow,
   latestTailoringRow,
   saveTailoringApproval,
+  saveTailoringReviewState,
   tailoringRowById,
 } from "@/server/db/tailoring-store";
-import type { CheckIssue, TailoringProposal } from "@/lib/schemas/tailoring";
+import type { CheckIssue, Decisions, ReviewEdit, TailoringProposal } from "@/lib/schemas/tailoring";
 import type { ResumeEdits } from "@/lib/schemas/resume-edits";
 
 // The app's entry points for tailored resumes: the current mode's database
@@ -27,9 +28,18 @@ export async function createTailoringDraft(input: {
   proposal: TailoringProposal;
   issues: CheckIssue[];
   model: string;
+  revisedFromId?: number;
+  revisionNote?: string | null;
+  decisions?: Decisions | null;
+  userEdits?: ReviewEdit[];
 }) {
   const { db, userId } = await scope();
   return insertTailoringDraft(db, userId, input);
+}
+
+export async function saveReviewState(id: number, input: { userEdits: ReviewEdit[]; decisions: Decisions }): Promise<boolean> {
+  const { db, userId } = await scope();
+  return saveTailoringReviewState(db, userId, id, input);
 }
 
 export async function getLatestTailoringRow(jobId: number) {

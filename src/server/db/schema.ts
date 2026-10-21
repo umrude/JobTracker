@@ -11,6 +11,7 @@ import {
   text,
   uniqueIndex,
   real,
+  type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 import { STATUSES } from "@/lib/schemas/status";
 import {
@@ -216,6 +217,16 @@ export const tailoredResumes = sqliteTable(
     // what was approved.
     approved: text("approved_json", { mode: "json" }).$type<unknown>(),
     snapshot: text("snapshot_json", { mode: "json" }).$type<unknown>(),
+    // Your direct edits to a draft (reworded text, removed or moved entries
+    // and bullets), applied on top of the checked proposal, which is never
+    // overwritten: resetting an edit just drops it. Re-validated on read.
+    userEdits: text("user_edits_json", { mode: "json" }).$type<unknown>().notNull().default(sql`'[]'`),
+    // Your accept/reject decision per change id, kept across reloads, edits,
+    // and revisions. Null until you've decided anything.
+    decisions: text("decisions_json", { mode: "json" }).$type<unknown>(),
+    // For a revision: the draft it revised, and your overall note.
+    revisedFromId: integer("revised_from_id").references((): AnySQLiteColumn => tailoredResumes.id, { onDelete: "set null" }),
+    revisionNote: text("revision_note"),
     // Page count of the compiled PDF, once compiled.
     pages: integer("pages"),
     // The model that proposed it ("demo" for canned fixtures).

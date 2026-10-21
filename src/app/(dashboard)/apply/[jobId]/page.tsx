@@ -242,7 +242,14 @@ function TailoredResumeCard({
               Version {latest.version} · {dateFormat.format(latest.createdAt)} ·{" "}
               {latest.model === "demo" ? "demo proposal" : latest.model}
               {latest.state === "approved" && " · Approved"}
+              {latest.revisedFromId !== null && " · Revised with your notes"}
             </p>
+            {latest.revisionNote && (
+              <p className="text-sm">
+                <span className="text-muted-foreground">Your note: </span>
+                {latest.revisionNote}
+              </p>
+            )}
             {activeResumeId !== undefined && latest.resumeId !== activeResumeId && (
               <Notice>This was tailored from an older resume version. Generate a new version to use your current one.</Notice>
             )}
@@ -254,7 +261,17 @@ function TailoredResumeCard({
             {review.reviewError && <Notice>{review.reviewError}</Notice>}
 
             {latest.state === "draft" && review.changes && (
-              <ReviewPanel tailoringId={latest.id} jobId={jobId} changes={review.changes} disabled={!writable} />
+              <ReviewPanel
+                // One panel per version: a successful revision starts fresh.
+                key={latest.id}
+                tailoringId={latest.id}
+                jobId={jobId}
+                changes={review.changes}
+                outline={review.outline}
+                initialDecisions={review.decisions}
+                yourIssues={review.yourIssues}
+                disabled={!writable}
+              />
             )}
 
             {latest.state === "approved" && (
@@ -358,7 +375,7 @@ function ApprovedSummary({
   writable: boolean;
   scores: Scores;
 }) {
-  const { pages, trimSuggestions } = review;
+  const { pages, trimSuggestions, trimEntries } = review;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -381,8 +398,8 @@ function ApprovedSummary({
       {pages !== null && pages > 1 && (
         <div className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
           <p className="text-sm font-medium">It runs past one page.</p>
-          {trimSuggestions.length > 0 ? (
-            <TrimPanel tailoringId={tailoringId} jobId={jobId} suggestions={trimSuggestions} disabled={!writable} />
+          {trimSuggestions.length > 0 || trimEntries.length > 0 ? (
+            <TrimPanel tailoringId={tailoringId} jobId={jobId} suggestions={trimSuggestions} entries={trimEntries} disabled={!writable} />
           ) : (
             <p className="text-sm text-muted-foreground">
               Generate a new version and reject some additions, or shorten bullets on the Profile page.

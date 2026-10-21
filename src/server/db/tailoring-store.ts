@@ -5,7 +5,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/server/db/schema";
 import { tailoredResumes } from "@/server/db/schema";
-import type { CheckIssue, TailoringProposal } from "@/lib/schemas/tailoring";
+import type { CheckIssue, Decisions, ReviewEdit, TailoringProposal } from "@/lib/schemas/tailoring";
 import type { ResumeEdits } from "@/lib/schemas/resume-edits";
 
 type AppDb = BetterSQLite3Database<typeof schema>;
@@ -22,6 +22,13 @@ export function insertTailoringDraft(
     issues: CheckIssue[];
     model: string;
     createdAt?: Date;
+    // For a revision: the draft it revised, your note, and the decisions
+    // carried over from it.
+    revisedFromId?: number;
+    revisionNote?: string | null;
+    decisions?: Decisions | null;
+    // Your own wording, carried over from the draft a revision came from.
+    userEdits?: ReviewEdit[];
   },
 ): { id: number; version: number } {
   return db.transaction((tx) => {
@@ -92,6 +99,24 @@ export function saveTailoringApproval(
       approvedAt: input.approvedAt ?? new Date(),
     })
     .where(and(eq(tailoredResumes.id, id), eq(tailoredResumes.userId, userId)))
+    .returning({ id: tailoredResumes.id })
+    .get();
+  return updated !== undefined;
+}
+
+// Saves your edits and decisions on a draft. Only a draft: an approved
+// version is final (generate or revise to change it). False if nothing
+// matched.
+export function saveTailoringReviewState(
+  db: AppDb,
+  userId: number,
+  id: number,
+  input: { userEdits: ReviewEdit[]; decisions: Decisions },
+): boolean {
+  const updated = db
+    .update(tailoredResumes)
+    .set({ userEdits: input.userEdits, decisions: input.decisions })
+    .where(and(eq(tailoredResumes.id, id), eq(tailoredResumes.userId, userId), eq(tailoredResumes.status, "draft")))
     .returning({ id: tailoredResumes.id })
     .get();
   return updated !== undefined;

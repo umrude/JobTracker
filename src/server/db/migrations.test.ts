@@ -119,6 +119,13 @@ describe("migrations 0012 and 0013", () => {
     expect(foreignKeys.find((fk) => fk.from === "job_id")?.on_delete).toBe("CASCADE");
   });
 
+  it("0014 links a revision to its draft with ON DELETE set null", () => {
+    const sqlite = new Database(":memory:");
+    migrate(drizzle(sqlite), { migrationsFolder: MIGRATIONS });
+    const foreignKeys = sqlite.prepare("pragma foreign_key_list(tailored_resumes)").all() as { from: string; on_delete: string }[];
+    expect(foreignKeys.find((fk) => fk.from === "revised_from_id")?.on_delete).toBe("SET NULL");
+  });
+
   it("0013 marks existing interviews and offers as past screening, and leaves the rest unknown", () => {
     const sqlite = new Database(":memory:");
     const db = drizzle(sqlite);

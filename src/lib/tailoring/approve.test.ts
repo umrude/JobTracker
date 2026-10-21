@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseResumeLatex } from "@/lib/latex/resume";
 import { createSkillResolver } from "@/lib/skills/resolver";
-import { buildApproval, trimApproval } from "@/lib/tailoring/approve";
+import { buildApproval, mergedSections, trimApproval } from "@/lib/tailoring/approve";
 import { currentAsProposal, listChanges } from "@/lib/tailoring/changes";
 import { checkProposal } from "@/lib/tailoring/check";
 import { getDemoTailoring, resolveDemoProposal } from "@/server/llm/tailor-demo";
@@ -38,6 +38,28 @@ describe("trimApproval", () => {
   const approved = buildApproval({ ...base, accepted: allChanges });
   if (!approved.ok) throw new Error(approved.message);
   const { final } = approved.approval;
+
+  it("removes a whole entry, but never a section's only one", () => {
+    const sections = mergedSections(current.ok ? current.proposal : final, final);
+    const multi = sections.find((section) => section.entries.length > 1);
+    const single = sections.find((section) => section.entries.length === 1);
+    if (!multi) throw new Error("no section with two entries");
+    const [gone] = multi.entries;
+    const heading = profile.entries.find((e) => `entry:${e.id}` === gone.entryId)?.title ?? "";
+
+    const trimmed = trimApproval({ final, removeBulletIds: [], removeEntryIds: [gone.entryId], profile, tex, latexSource: DEMO_TEX, resolver });
+    expect(trimmed.ok).toBe(true);
+    if (!trimmed.ok) return;
+    expect(trimmed.approval.tex).not.toContain(heading);
+    // Its bullets are no longer trim suggestions.
+    expect(trimmed.approval.final.trimOrder.some((id) => gone.bullets.some((b) => b.bulletId === id))).toBe(false);
+
+    if (single) {
+      const kept = trimApproval({ final, removeBulletIds: [], removeEntryIds: [single.entries[0].entryId], profile, tex, latexSource: DEMO_TEX, resolver });
+      expect(kept.ok).toBe(true);
+      if (kept.ok) expect(mergedSections(current.ok ? current.proposal : final, kept.approval.final).find((s) => s.section === single.section)?.entries).toHaveLength(1);
+    }
+  });
 
   it("removes bullets anywhere in the resume, including untouched sections", () => {
     // The junior role's bullet is in Experience, which this approval didn't change.

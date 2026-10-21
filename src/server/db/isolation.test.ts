@@ -16,9 +16,11 @@ import * as schema from "@/server/db/schema";
 const state = vi.hoisted(() => ({
   db: undefined as unknown,
   userId: 0,
+  // Demo mode lets a test tailor and revise with canned answers.
+  mode: "live" as "live" | "demo",
 }));
 
-vi.mock("@/server/mode", () => ({ getMode: async () => "live" }));
+vi.mock("@/server/mode", () => ({ getMode: async () => state.mode }));
 vi.mock("@/server/db/client", () => ({ getDb: () => state.db }));
 vi.mock("@/server/current-user", () => ({ requireUserId: async () => state.userId }));
 // Only what the Gmail connection needs: a token key and OAuth settings.
@@ -65,6 +67,7 @@ beforeEach(() => {
     { id: BOB, email: "bob@example.com" },
   ]).run();
   state.db = db;
+  state.mode = "live";
   testDb = db;
 });
 
@@ -546,5 +549,67 @@ describe("listings and screening on applications", () => {
     await applicationsDal.updateApplication({ id: app.id, passedScreening: false });
     [mine] = await applicationsDal.listApplicationsWithJob();
     expect(mine.passedScreeningAt).not.toBeNull();
+  });
+});
+
+describe("editing and revising a tailored draft", () => {
+  const NORTHWIND = "https://careers.northwindrobotics.example/jobs/1821";
+
+  // Alice's resume, profile, and a demo tailoring draft for the Northwind job.
+  async function alicesDraft() {
+    const tailoring = await import("@/server/tailoring");
+    as(ALICE);
+    await resumesDal.createResumeVersion("alice", DEMO_TEX);
+    await profileDal.importProfileFromLatex(DEMO_TEX);
+    const job = await jobsDal.createSavedJob({ company: "Northwind Robotics", title: "Senior Frontend Engineer", url: NORTHWIND, listingText: "Build things." });
+    state.mode = "demo";
+    const created = await tailoring.runTailoring(job.id);
+    state.mode = "live";
+    if (!created.ok) throw new Error(created.error.message);
+    return { tailoring, jobId: job.id, draftId: created.tailoringId };
+  }
+
+  it("saves your edits and decisions only on your own draft", async () => {
+    const { tailoring, jobId, draftId } = await alicesDraft();
+    const edit = { edit: { op: "text" as const, itemId: "summary", text: "Frontend engineer who ships." } };
+
+    as(BOB);
+    expect(await tailoring.editTailoring(draftId, edit, {})).toMatchObject({ ok: false });
+    const { saveReviewState } = await import("@/server/db/tailored-resumes");
+    expect(await saveReviewState(draftId, { userEdits: [], decisions: {} })).toBe(false);
+
+    as(ALICE);
+    expect(await tailoring.editTailoring(draftId, edit, {})).toEqual({ ok: true });
+    const review = await tailoring.getTailoringReview(jobId);
+    expect(review.changes?.find((c) => c.id === "summary")?.after).toEqual(["Frontend engineer who ships."]);
+    // You wrote it, so it's accepted.
+    expect(review.decisions.summary).toBe("accepted");
+    expect(review.outline?.summary).toEqual({ text: "Frontend engineer who ships.", edited: true });
+
+    // Reset puts the suggestion back, undecided.
+    await tailoring.editTailoring(draftId, { reset: "summary" }, review.decisions);
+    expect((await tailoring.getTailoringReview(jobId)).decisions.summary).toBeUndefined();
+  });
+
+  it("revises into a new version, keeping your wording and decisions", async () => {
+    const { tailoring, jobId, draftId } = await alicesDraft();
+    await tailoring.editTailoring(draftId, { edit: { op: "text", itemId: "summary", text: "My own summary." } }, {});
+    const before = await tailoring.getTailoringReview(jobId);
+    const request = { notes: [], generalNote: "Keep it to one page.", pages: 2 };
+
+    as(BOB);
+    expect(await tailoring.reviseTailoring(draftId, request, {})).toMatchObject({ ok: false });
+
+    as(ALICE);
+    expect(await tailoring.reviseTailoring(draftId, { ...request, generalNote: "" }, {})).toMatchObject({ ok: false });
+    state.mode = "demo";
+    const revised = await tailoring.reviseTailoring(draftId, request, before.decisions);
+    state.mode = "live";
+    expect(revised).toMatchObject({ ok: true });
+
+    const after = await tailoring.getTailoringReview(jobId);
+    expect(after.latest).toMatchObject({ status: "ok", version: 2, revisedFromId: draftId, revisionNote: "Keep it to one page." });
+    expect(after.outline?.summary).toEqual({ text: "My own summary.", edited: true });
+    expect(after.decisions.summary).toBe("accepted");
   });
 });

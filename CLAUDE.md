@@ -71,7 +71,7 @@ src/
 - Save results (comparisons, later cover letters) so reopening a job doesn't re-run the model. Re-running is an explicit user action.
 - Resume uploads (PDF/DOCX) are parsed to text on the server and only the text is stored. Never persist the uploaded file. Enforce a size limit and show friendly errors for unreadable files.
 - An optional LaTeX source (.tex) can be attached to a resume version. It's stored as text (never the file), validated, and given `\ifPDFTeX` guards on upload so it compiles under Tectonic. Tailoring requires it.
-- Tailoring must never invent anything. Every skill, bullet, and fact in a tailored resume must trace back to the resume or the profile, and the app checks this in code, not only in the prompt.
+- Tailoring must never invent anything. Every skill, bullet, and fact in a tailored resume must trace back to the resume or the profile, and the app checks this in code, not only in the prompt. Text you write yourself while reviewing is the exception: it's yours, so it's flagged (with "add it to your profile") rather than reverted. Revision notes can't add facts either: the same checker runs on every revision.
 - The user can preview and edit parsed resume text before saving.
 - Demo seed data uses a fake resume only.
 - Mock the Anthropic client in tests; tests must never hit the real API.
@@ -95,7 +95,7 @@ src/
 - **GmailConnection** (Phase 4): one per user; the connected address, the refresh token (encrypted with `TOKEN_ENCRYPTION_KEY`, user id bound in), the first sync's start date, Gmail's history id, needs-reconnect flag
 - **EmailEvent** (Phase 4): a suggestion. From an email (message and thread id, sender, subject, snippet; never the body) or the ghosted rule. Linked application (or saved job) and how it was matched, classified type, confidence, one-line reason, the company and role the email names (prefill for "Add as application"), proposed status (a snapshot; review recomputes it from the application's current status), state (pending / confirmed / dismissed)
 - **CoverLetter** (Phase 3): job, resume used, tone, versions
-- **TailoredResume** (Phase 3): job, resume used, approved edits and a snapshot of the profile text used (Zod-validated), versions. PDFs are rebuilt from LaTeX source + edits, not stored. Comparisons can target a tailored resume instead of a resume version
+- **TailoredResume** (Phase 3): job, resume used, approved edits and a snapshot of the profile text used (Zod-validated), versions. A draft also holds your own edits (applied on top of the never-overwritten proposal; your wording is flagged, not reverted, when the profile doesn't back it), your accept/reject decisions, and for a revision the version it revised and your note. PDFs are rebuilt from LaTeX source + edits, not stored. Comparisons can target a tailored resume instead of a resume version
 ## Commands
  
 ```

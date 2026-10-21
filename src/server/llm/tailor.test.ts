@@ -107,3 +107,26 @@ describe("buildTailorRequest", () => {
     expect(first.prompt).not.toContain("<checker_issues>");
   });
 });
+
+describe("buildTailorRequest for a revision", () => {
+  it("sends the draft, your decisions, notes, page count, and wording, with the rules unchanged", () => {
+    const current: TailoringProposal = { summary: { text: "Mine.", sourceIds: [] }, skills: [], sections: [], trimOrder: [], rationale: "" };
+    const request = buildTailorRequest("LISTING", "CONTEXT", null, {
+      current,
+      decisions: [{ label: "Summary", decision: "accepted" }, { label: "Remove WisePub", decision: "rejected" }],
+      notes: [{ label: "Summary", now: ["Mine."], note: "Drop the last sentence" }],
+      generalNote: "Keep it to one page",
+      pages: 2,
+      yourWording: [{ itemId: "summary", text: "Mine." }],
+    });
+    expect(request.prompt).toContain("<current_draft>");
+    expect(request.prompt).toContain("- Rejected: Remove WisePub");
+    expect(request.prompt).toContain('- On "Summary" (now: "Mine."): Drop the last sentence');
+    expect(request.prompt).toContain("- On the whole draft: Keep it to one page");
+    expect(request.prompt).toContain("the resume is 2 pages");
+    expect(request.prompt).toContain('- summary: "Mine."');
+    expect(request.prompt).toContain("a note can't add a fact");
+    // The honesty rules are the same system prompt as generating.
+    expect(request.system).toBe(buildTailorRequest("LISTING", "CONTEXT", null).system);
+  });
+});
