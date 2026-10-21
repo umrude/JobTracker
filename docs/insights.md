@@ -5,7 +5,7 @@ Phase 5. A recap of which skills your applications keep asking for that your res
 | Step | What | Status |
 |---|---|---|
 | 5a | Listings for every application, "passed screening", listing fingerprints | Done |
-| 5b | The insight numbers (pure, tested) | Planned |
+| 5b | The insight numbers (pure, tested) | Done |
 | 5c | The Insights page, and comparing several jobs at once | Planned |
 | 5d | Demo seed, docs, end-to-end check | Planned |
 
@@ -56,3 +56,54 @@ The store reads the listing itself when saving a comparison, rather than taking 
 ### Demo
 
 Interviewing and Offer applications have a screening date. Ironclad Ledger, rejected after its final round, is the "passed screening, then rejected" case, like TMX.
+
+## Step 5b: the numbers
+
+Code: `lib/insights/build.ts` (the numbers), `lib/insights/skills.ts` (counting skills), `server/db/insights-store.ts` (loading the data), and `server/insights.ts` (the page's entry point). All of it reads; nothing calls a model.
+
+### What's counted
+
+**Included:** a job (saved or applied) with a listing *and* a comparison of your resume as written. Each job counts once, with its latest comparison.
+
+The rest is listed with the reason, not dropped silently:
+
+- no listing;
+- a listing but not compared yet;
+- compared, but the listing changed since (still counted; decision 5);
+- compared against an older resume version (still counted).
+
+**Scope:** all compared listings, or applications only. Saved jobs say what the market asks for; applications are the only ones with outcomes.
+
+### Skills
+
+For each skill the included listings ask for:
+
+- **asked:** how many listings asked for it;
+- **missing:** how many times your resume didn't show it;
+- **where it stands in your profile:**
+  - **in your profile:** you have it, so your resume just didn't show it. Tailoring can fix that.
+  - **Learning:** marked Learning in your profile.
+  - **absent:** not in your profile at all.
+
+Most often missing first, then most asked.
+
+**Counting the same skill once.** A comparison's skills are the model's own phrases ("AWS (ECS, RDS, S3)", "Production PostgreSQL experience"). Counted as written, the same skill would be spread over many one-off phrases. `splitSkillPhrases` uses the skill resolver (built-in aliases plus your own) to find the known skills inside each phrase:
+
+- "AWS (ECS, RDS, S3)" counts toward AWS, ECS, RDS, and S3;
+- "Postgres" and "PostgreSQL experience" are one skill;
+- a phrase with no known skill ("On-call ownership") stays as written;
+- within one comparison, a skill that's both matched and missing counts as matched.
+
+The catch: skill names that are also ordinary words ("Go", "Rust", "Express") aren't picked out of phrases, the same trade-off the honesty checker makes. So "Go, Rust, or Java" counts as Java only. A missed skill is better than "the next step" counted as Next.js.
+
+### Outcomes
+
+Only applications, and only among listings that asked for the skill. A skill's row compares like with like:
+
+- **Rejected:** Rejected plus Ghosted, with ghosted shown inside it ("missing in 6 of 9 rejections, 2 of them ghosted").
+- **Progressed:** Interviewing or Offer.
+- **Waiting** (Applied, Acknowledged) is in neither.
+- **comparable** only with at least 5 on both sides (`MIN_SAMPLE`). Otherwise the page shows the counts labeled "too few to compare".
+- **The screening split:** rejections divide into **after screening** (you marked it passed) and **stage unknown**. It's shown once at least 5 rejections are known to have passed screening (`SCREENING_MIN`); before that, one line says how many.
+
+Counts, never causes: the page shows both sides and leaves the reading to you.

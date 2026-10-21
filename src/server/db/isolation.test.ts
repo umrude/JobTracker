@@ -613,3 +613,27 @@ describe("editing and revising a tailored draft", () => {
     expect(after.decisions.summary).toBe("accepted");
   });
 });
+
+describe("insights", () => {
+  it("counts only your own jobs, comparisons, and skills", async () => {
+    const { getInsights } = await import("@/server/insights");
+    const result = { score: 60, matchedSkills: ["React"], missingSkills: ["Kubernetes"], missingKeywords: [], suggestions: [] };
+
+    as(ALICE);
+    const resume = await resumesDal.createResumeVersion("alice", null);
+    const job = await jobsDal.createSavedJob({ company: "Acme", title: "Engineer", listingText: "React and Kubernetes." });
+    await comparisonsDal.insertComparison({ jobId: job.id, resumeId: resume.id, result, model: "demo" });
+    await applicationsDal.createApplication({ company: "NoListing", title: "Dev", status: "rejected" });
+
+    as(BOB);
+    const bobs = await getInsights("all");
+    expect(bobs.skills).toEqual([]);
+    expect(bobs.coverage).toMatchObject({ included: 0, noListing: [], notCompared: [] });
+
+    as(ALICE);
+    const alices = await getInsights("all");
+    expect(alices.coverage.included).toBe(1);
+    expect(alices.coverage.noListing.map((j) => j.company)).toEqual(["NoListing"]);
+    expect(alices.skills.map((s) => [s.name, s.missing])).toEqual([["Kubernetes", 1], ["React", 0]]);
+  });
+});
