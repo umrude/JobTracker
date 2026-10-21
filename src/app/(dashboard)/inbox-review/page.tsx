@@ -5,8 +5,11 @@ import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 import { isWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
 import { getGmailStatus, type GmailStatus } from "@/server/db/gmail-connections";
-import { listPendingSuggestions, listRecentlyDecided } from "@/server/db/email-events";
+import { countUnclassified, listPendingSuggestions, listRecentlyDecided } from "@/server/db/email-events";
 import { listApplicationsWithJob } from "@/server/db/applications";
+import { listSavedJobs } from "@/server/db/jobs";
+import type { SuggestionRow } from "@/server/db/email-event-store";
+import { matchByClassifier, matchEmail } from "@/lib/email/matching";
 import { EMAIL_TYPE_LABELS } from "@/lib/schemas/email";
 import { STATUS_LABELS } from "@/lib/schemas/status";
 import { GMAIL_NOTICE_TEXT, parseGmailNotice } from "@/lib/email/connect-notices";
@@ -16,6 +19,7 @@ import { connectGmailAction, disconnectGmailAction } from "./actions";
 import { SyncStartForm } from "./_components/sync-start-form";
 import { SyncButton } from "./_components/sync-button";
 import { SuggestionCard } from "./_components/suggestion-card";
+import type { LinkGroup } from "./_components/suggestion-actions";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 const dateTimeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
@@ -23,6 +27,42 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", t
 // "YYYY-MM-DD" in UTC, as <input type="date"> wants. Sync dates are whole
 // UTC days (see sync-window.ts).
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+
+type Choice = { value: string; label: string; company: string; title: string };
+
+// The link picker's choices for one email: likely matches first (the same
+// matching sync uses, run on what's stored: sender, subject, snippet, and
+// the company and role the classifier read), then every application, then
+// every saved job. Two near-identical roles at one company end up side by
+// side at the top.
+function linkGroups(row: SuggestionRow, apps: Choice[], jobs: Choice[]): LinkGroup[] {
+  const all = [...apps, ...jobs];
+  let likely: Choice[] = [];
+  if (row.source === "email") {
+    const email = {
+      id: String(row.id),
+      threadId: "",
+      fromAddress: row.fromAddress ?? "",
+      fromName: row.fromName ?? "",
+      subject: row.subject ?? "",
+      snippet: row.snippet ?? "",
+      receivedAt: row.receivedAt ?? row.createdAt,
+      labels: [],
+    };
+    const byHeaders = matchEmail(email, all, undefined);
+    const match =
+      byHeaders.target === null
+        ? matchByClassifier({ company: row.extractedCompany, role: row.extractedRole }, all, byHeaders.candidates)
+        : byHeaders;
+    likely = match.target ? [match.target] : match.candidates;
+  }
+  const strip = ({ value, label }: Choice) => ({ value, label });
+  return [
+    { label: "Likely", options: likely.map(strip) },
+    { label: "Applications", options: apps.map(strip) },
+    { label: "Saved jobs", options: jobs.map(strip) },
+  ];
+}
 
 // A Server Component: the connection and the suggestions are read at
 // render time. Only the buttons, the link picker, and the start date are
@@ -34,14 +74,20 @@ export default async function InboxReviewPage({ searchParams }: PageProps<"/inbo
   const notice = parseGmailNotice(gmail);
   const status = await getGmailStatus();
   const writable = isWritable();
-  const [pending, decided, applications] = await Promise.all([
+  const [pending, decided, applications, savedJobs, unclassified] = await Promise.all([
     listPendingSuggestions(),
     listRecentlyDecided(),
     listApplicationsWithJob(),
+    listSavedJobs(),
+    countUnclassified(),
   ]);
-  const choices = applications
-    .map((app) => ({ id: app.id, label: `${app.job.company} · ${app.job.title}` }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const byLabel = (a: Choice, b: Choice) => a.label.localeCompare(b.label);
+  const appChoices: Choice[] = applications
+    .map((app) => ({ value: `app:${app.id}`, label: `${app.job.company} · ${app.job.title}`, company: app.job.company, title: app.job.title }))
+    .sort(byLabel);
+  const jobChoices: Choice[] = savedJobs
+    .map((job) => ({ value: `job:${job.id}`, label: `${job.company} · ${job.title}`, company: job.company, title: job.title }))
+    .sort(byLabel);
   const gmailAccount = status.kind === "connected" ? status.email : null;
 
   return (
@@ -67,6 +113,28 @@ export default async function InboxReviewPage({ searchParams }: PageProps<"/inbo
 
       <GmailCard status={status} writable={writable} />
 
+      {unclassified > 0 && (
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-dashed p-4">
+          <div className="space-y-1 text-sm">
+            <p className="font-medium">
+              {unclassified} {unclassified === 1 ? "email" : "emails"} couldn&apos;t be classified
+            </p>
+            <p className="text-muted-foreground">
+              For example while the Anthropic account was out of credits. Classify them again to get their
+              suggestions; nothing is re-read from your inbox except their text.
+            </p>
+          </div>
+          <SyncButton
+            endpoint="/api/sync/reclassify"
+            label="Classify again"
+            pendingLabel="Classifying..."
+            variant="outline"
+            disabled={!writable}
+            disabledMessage="Disabled in demo mode"
+          />
+        </div>
+      )}
+
       <section className="space-y-2">
         <h2 className="font-medium">To review{pending.length > 0 ? ` (${pending.length})` : ""}</h2>
         {pending.length === 0 ? (
@@ -77,7 +145,12 @@ export default async function InboxReviewPage({ searchParams }: PageProps<"/inbo
           <ul className="grid gap-2">
             {pending.map((row) => (
               <li key={row.id}>
-                <SuggestionCard row={row} applications={choices} gmailAccount={gmailAccount} writable={writable} />
+                <SuggestionCard
+                  row={row}
+                  linkGroups={linkGroups(row, appChoices, jobChoices)}
+                  gmailAccount={gmailAccount}
+                  writable={writable}
+                />
               </li>
             ))}
           </ul>

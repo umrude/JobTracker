@@ -102,6 +102,37 @@ const FIXTURES: Fixture[] = [
     daysAgo: 6,
   },
 
+  // About a saved job (no application yet): you applied on their site but
+  // didn't move it to Applied. Suggests adding it to the board.
+  {
+    id: "demo-northwind-ack",
+    thread: "t-northwind",
+    from: ["Northwind Robotics", "no-reply@hire.lever.co"],
+    subject: "Thanks for applying to Northwind Robotics",
+    snippet: "Hi Alex, we've received your application for Senior Frontend Engineer. Our team is reviewing applications now.",
+    daysAgo: 1,
+  },
+  // An application you never added to the tracker: kept because it's from
+  // an applicant-tracking system, then offered as "Add as application".
+  {
+    id: "demo-pinecrest-ack",
+    thread: "t-pinecrest",
+    from: ["Pinecrest Labs", "no-reply@us.greenhouse-mail.io"],
+    subject: "Thank you for applying to Pinecrest Labs",
+    snippet: "Thanks for your interest in the Frontend Engineer role at Pinecrest Labs. We've received your application and will be in touch.",
+    daysAgo: 9,
+  },
+  // Also never added, straight from the company with a vague subject: only
+  // the pre-filter's snippet phrases catch it.
+  {
+    id: "demo-alderfinch-interview",
+    thread: "t-alderfinch",
+    from: ["Rowan Patel", "rowan@alderfinch.example"],
+    subject: "Quick question",
+    snippet: "Hi Alex, thanks for applying for the Product Designer role at Alder & Finch! Would you have time for a 30-minute call this week?",
+    daysAgo: 4,
+  },
+
   // ---- Noise the pre-filter should drop ----
   // Your employer, not the "Larkspur Systems" you applied to.
   {

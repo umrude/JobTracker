@@ -280,8 +280,15 @@ export const emailEvents = sqliteTable(
     // pick one in review.
     applicationId: integer("application_id").references(() => applications.id, { onDelete: "cascade" }),
     matchMethod: text("match_method", { enum: MATCH_METHODS }),
+    // A saved job (no application yet) the email is about, when it matched
+    // one instead of an application. Confirming adds it to the board.
+    jobId: integer("job_id").references(() => jobs.id, { onDelete: "cascade" }),
     // The classifier's answer (null until classified).
     emailType: text("email_type", { enum: EMAIL_TYPES }),
+    // The company and role the email names, as the classifier read them.
+    // Only used to prefill "Add as application", which you check first.
+    extractedCompany: text("extracted_company"),
+    extractedRole: text("extracted_role"),
     confidence: real("confidence"),
     reason: text("reason"),
     proposedStatus: text("proposed_status", { enum: STATUSES }),

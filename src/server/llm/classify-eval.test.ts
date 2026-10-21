@@ -6,9 +6,9 @@ import { CLASSIFIER_EVAL_CASES } from "@/server/llm/classify-eval-cases";
 import { evalCaseInput, evalCaseMeta, scoreEval, type EvalOutcome } from "@/server/llm/classify-eval";
 
 describe("the eval set", () => {
-  it("has 40 cases with unique ids and at least four of every type", () => {
-    expect(CLASSIFIER_EVAL_CASES).toHaveLength(40);
-    expect(new Set(CLASSIFIER_EVAL_CASES.map((c) => c.id)).size).toBe(40);
+  it("has 45 cases with unique ids and at least four of every type", () => {
+    expect(CLASSIFIER_EVAL_CASES).toHaveLength(45);
+    expect(new Set(CLASSIFIER_EVAL_CASES.map((c) => c.id)).size).toBe(45);
     for (const type of EMAIL_TYPES) {
       expect(CLASSIFIER_EVAL_CASES.filter((c) => c.expected === type).length, type).toBeGreaterThanOrEqual(4);
     }
@@ -26,6 +26,16 @@ describe("the eval set", () => {
     const missed = CLASSIFIER_EVAL_CASES.filter(
       (c) => c.expected !== "not_relevant" && c.application && !c.viaThread,
     ).filter((c) => !prefilter(evalCaseMeta(c), [c.application?.company ?? ""]).candidate);
+    expect(missed.map((c) => c.id)).toEqual([]);
+  });
+
+  // Applications you never added: no company to recognize, so only the
+  // applicant-tracking senders and the subject and snippet phrases can
+  // let them through.
+  it("lets through hiring news about applications you never added", () => {
+    const unlinked = CLASSIFIER_EVAL_CASES.filter((c) => c.expected !== "not_relevant" && !c.application);
+    expect(unlinked.length).toBeGreaterThanOrEqual(5);
+    const missed = unlinked.filter((c) => !prefilter(evalCaseMeta(c), []).candidate);
     expect(missed.map((c) => c.id)).toEqual([]);
   });
 });
@@ -52,5 +62,14 @@ describe("scoreEval", () => {
     expect(report.confident).toEqual({ count: 3, correct: 2 });
     expect(report.unsure).toEqual({ count: 1, correct: 0 });
     expect(report.misses.map((m) => m.expected)).toEqual(["interview", "assessment", "acknowledged"]);
+  });
+
+  it("scores the company and role only where the case states them, ignoring punctuation", () => {
+    const report = scoreEval([
+      { ...outcome("acknowledged", "acknowledged", 0.9), company: "Halcyon Pay, Inc.", role: "Senior Software Engineer - Frontend (Auth Experiences)", expectedCompany: "Halcyon Pay", expectedRole: "Senior Software Engineer, Frontend (Auth Experiences)" },
+      { ...outcome("not_relevant", "not_relevant", 0.9), company: "Brightpath Talent", role: null, expectedCompany: null, expectedRole: null },
+      outcome("offer", "offer", 0.9),
+    ]);
+    expect(report.extraction).toEqual({ checked: 2, company: 1, role: 2 });
   });
 });

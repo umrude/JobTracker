@@ -27,7 +27,7 @@ src/
     api/sync/           Gmail sync route handler
   server/               server-only code; every file imports "server-only"
     db/                 Drizzle schema, client factory, seed
-    gmail/              fetch, pre-filter, matching
+    gmail/              mail sources (Gmail, demo inbox), OAuth, token encryption, sync pipeline
     llm/                classify, compare, cover letter (+ demo fixtures)
     mode.ts             getMode(), assertWritable()
   lib/schemas/          Zod schemas; the single source of truth for types
@@ -92,7 +92,8 @@ src/
   - The profile owns content; the .tex owns presentation (header, section order, layout). When they differ, the profile wins in tailored output
 - **ComparisonSkill** (Phase 3): comparison, canonical skill name, matched or missing. Normalized rows for counting across listings
 - **Comparison**: job, resume, result JSON (Zod-validated), createdAt, and optionally the approved tailored resume it scored. "Latest comparison for a job" always means the resume as written (`tailoring_id IS NULL`); tailored comparisons save no skill rows
-- **EmailEvent** (Phase 4): gmail message id, thread id, linked application, classified type, confidence, confirmed flag
+- **GmailConnection** (Phase 4): one per user; the connected address, the refresh token (encrypted with `TOKEN_ENCRYPTION_KEY`, user id bound in), the first sync's start date, Gmail's history id, needs-reconnect flag
+- **EmailEvent** (Phase 4): a suggestion. From an email (message and thread id, sender, subject, snippet; never the body) or the ghosted rule. Linked application (or saved job) and how it was matched, classified type, confidence, one-line reason, the company and role the email names (prefill for "Add as application"), proposed status (a snapshot; review recomputes it from the application's current status), state (pending / confirmed / dismissed)
 - **CoverLetter** (Phase 3): job, resume used, tone, versions
 - **TailoredResume** (Phase 3): job, resume used, approved edits and a snapshot of the profile text used (Zod-validated), versions. PDFs are rebuilt from LaTeX source + edits, not stored. Comparisons can target a tailored resume instead of a resume version
 ## Commands
@@ -130,7 +131,7 @@ Work on one phase at a time. Do not start a later phase unless I ask.
 4. **Gmail sync**: OAuth, incremental sync, pre-filter, classifier, review inbox, classifier eval set.
 5. **Insights**: a skill-gap recap across comparisons and applications (skills most often missing, whether they're in my profile, Learning, or absent, and after Phase 4, how they relate to rejections). Shows counts and facts, never causal claims. Demo seed with enough fake history to be meaningful.
 6. **Polish**: README with architecture diagram and decision log, screenshots/GIF from demo mode, CI (GitHub Actions), hosted read-only demo.
-**Current phase: 4, not started** (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page. Phase 3 complete: LaTeX source and compiling, profile with "I have this" and skill aliases, multi-user readiness, tailored resumes with honesty checks and per-change review, cover letters, and the tailored comparison; see docs/tailored-resumes.md and docs/cover-letters.md)
+**Current phase: 4 complete, 5 not started** (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page. Phase 3 complete: LaTeX source and compiling, profile with "I have this" and skill aliases, multi-user readiness, tailored resumes with honesty checks and per-change review, cover letters, and the tailored comparison; see docs/tailored-resumes.md and docs/cover-letters.md. Phase 4 complete: Gmail OAuth with encrypted tokens, history-based sync, pre-filter and thread-aware matching, Haiku classifier with a 40-case eval, review inbox with live proposals, ghosted rule, pre-synced demo; see docs/gmail-sync.md)
  
 ## Hosting
 

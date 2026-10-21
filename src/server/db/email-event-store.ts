@@ -2,11 +2,11 @@
 // tests use it with their own connection. Every function takes the
 // database and owner as arguments and filters by the owner; the app
 // reaches it through email-events.ts and gmail-sync.ts.
-import { and, asc, desc, eq, inArray, isNotNull, max, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/server/db/schema";
 import { applications, emailEvents, jobs } from "@/server/db/schema";
-import { proposeStatus } from "@/lib/email/propose";
+import { proposeForSavedJob, proposeStatus } from "@/lib/email/propose";
 import type { GhostedInput } from "@/lib/email/ghosted";
 import type { Status } from "@/lib/schemas/status";
 import type { EmailType } from "@/lib/schemas/email";
@@ -63,12 +63,55 @@ export function applicationsForSync(db: AppDb, userId: number) {
 
 export type SyncApplication = ReturnType<typeof applicationsForSync>[number];
 
+// Saved jobs (no application yet), for matching emails about a job you
+// applied to but haven't moved to Applied.
+export function savedJobsForSync(db: AppDb, userId: number) {
+  return db
+    .select({ id: jobs.id, company: jobs.company, title: jobs.title })
+    .from(jobs)
+    .leftJoin(applications, and(eq(applications.jobId, jobs.id), eq(applications.userId, userId)))
+    .where(and(eq(jobs.userId, userId), isNull(applications.id)))
+    .all();
+}
+
+export type SyncSavedJob = ReturnType<typeof savedJobsForSync>[number];
+
 export type NewEmailEvent = Omit<typeof emailEvents.$inferInsert, "id" | "userId">;
 
 // Ignores a message already processed (the unique index), so two syncs at
 // once can't create duplicates.
 export function insertEmailEvent(db: AppDb, userId: number, values: NewEmailEvent): void {
   db.insert(emailEvents).values({ ...values, userId }).onConflictDoNothing().run();
+}
+
+// Emails the classifier couldn't answer that are still waiting, oldest
+// first, for "Classify again".
+export function unclassifiedEmailRows(db: AppDb, userId: number) {
+  return db
+    .select()
+    .from(emailEvents)
+    .where(
+      and(
+        eq(emailEvents.userId, userId),
+        eq(emailEvents.source, "email"),
+        eq(emailEvents.state, "pending"),
+        isNull(emailEvents.emailType),
+        isNotNull(emailEvents.gmailMessageId),
+      ),
+    )
+    .orderBy(asc(emailEvents.receivedAt), asc(emailEvents.id))
+    .all();
+}
+
+export function unclassifiedCount(db: AppDb, userId: number): number {
+  return unclassifiedEmailRows(db, userId).length;
+}
+
+export function updateEmailEvent(db: AppDb, userId: number, id: number, values: Partial<NewEmailEvent>): void {
+  db.update(emailEvents)
+    .set(values)
+    .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId)))
+    .run();
 }
 
 // The ghosted rule's inputs, for every application.
@@ -118,9 +161,12 @@ function suggestionColumns() {
     snippet: emailEvents.snippet,
     receivedAt: emailEvents.receivedAt,
     applicationId: emailEvents.applicationId,
+    jobId: emailEvents.jobId,
     matchMethod: emailEvents.matchMethod,
     emailType: emailEvents.emailType,
     confidence: emailEvents.confidence,
+    extractedCompany: emailEvents.extractedCompany,
+    extractedRole: emailEvents.extractedRole,
     reason: emailEvents.reason,
     proposedStatus: emailEvents.proposedStatus,
     state: emailEvents.state,
@@ -132,14 +178,15 @@ function suggestionColumns() {
   };
 }
 
-// Joined to the application and job, both filtered by owner too: a link
-// can only ever show your own application.
+// Joined to the application and its job, or to the saved job when the
+// email is about one, all filtered by owner too: a link can only ever show
+// your own data.
 function withApplication(db: AppDb, userId: number) {
   return db
     .select(suggestionColumns())
     .from(emailEvents)
     .leftJoin(applications, and(eq(applications.id, emailEvents.applicationId), eq(applications.userId, userId)))
-    .leftJoin(jobs, and(eq(jobs.id, applications.jobId), eq(jobs.userId, userId)));
+    .leftJoin(jobs, and(eq(jobs.id, sql`coalesce(${applications.jobId}, ${emailEvents.jobId})`), eq(jobs.userId, userId)));
 }
 
 const WAITING: readonly Status[] = ["applied", "acknowledged", "interviewing"];
@@ -150,11 +197,13 @@ const WAITING: readonly Status[] = ["applied", "acknowledged", "interviewing"];
 // confirming both use this, so a card never offers "Rejected ->
 // Acknowledged" just because the email once meant that.
 export function liveProposal(
-  event: { source: "email" | "ghosted"; emailType: EmailType | null },
+  event: { source: "email" | "ghosted"; emailType: EmailType | null; applicationId: number | null; jobId: number | null },
   current: Status | null,
 ): Status | null {
+  if (event.source === "ghosted") return current !== null && WAITING.includes(current) ? "ghosted" : null;
+  // About a saved job: add it to the board at the status the email implies.
+  if (event.applicationId === null) return event.jobId === null ? null : proposeForSavedJob(event.emailType);
   if (current === null) return null;
-  if (event.source === "ghosted") return WAITING.includes(current) ? "ghosted" : null;
   return proposeStatus(event.emailType, current);
 }
 
@@ -202,26 +251,73 @@ export function confirmSuggestion(db: AppDb, userId: number, id: number, now = n
       .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId), eq(emailEvents.state, "pending")))
       .get();
     if (!event) return { ok: false, message: "That suggestion isn't waiting for review any more." };
-    if (!event.applicationId) return { ok: false, message: "Link it to an application first." };
+
+    const markConfirmed = (applicationId: number, status: Status) =>
+      // Records what was actually applied, for "Recently reviewed".
+      tx.update(emailEvents)
+        .set({ applicationId, state: "confirmed", decidedAt: now, proposedStatus: status })
+        .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId)))
+        .run();
+
+    let applicationId = event.applicationId;
+
+    // About a saved job: add it to the board, like "Move to Applied" on the
+    // Saved jobs page (its notes move to the application), but at the
+    // status the email implies, applied as of the email's date.
+    if (applicationId === null && event.jobId !== null) {
+      const job = tx
+        .select({ id: jobs.id, notes: jobs.notes })
+        .from(jobs)
+        .where(and(eq(jobs.id, event.jobId), eq(jobs.userId, userId)))
+        .get();
+      if (!job) return { ok: false, message: "That saved job no longer exists." };
+      const existing = tx
+        .select({ id: applications.id })
+        .from(applications)
+        .where(and(eq(applications.jobId, job.id), eq(applications.userId, userId)))
+        .get();
+      if (existing) {
+        // Moved to the board since the sync: treat the email as about that
+        // application instead.
+        applicationId = existing.id;
+      } else {
+        const status = proposeForSavedJob(event.emailType);
+        if (!status) return { ok: false, message: "This email doesn't say where the application stands. Dismiss it instead." };
+        const created = tx
+          .insert(applications)
+          .values({
+            userId,
+            jobId: job.id,
+            status,
+            appliedAt: event.receivedAt ?? now,
+            notes: job.notes?.trim() ? job.notes : null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: applications.id })
+          .get();
+        tx.update(jobs).set({ notes: null }).where(and(eq(jobs.id, job.id), eq(jobs.userId, userId))).run();
+        markConfirmed(created.id, status);
+        return { ok: true, status };
+      }
+    }
+
+    if (applicationId === null) return { ok: false, message: "Link it to an application first." };
     const app = tx
       .select({ status: applications.status })
       .from(applications)
-      .where(and(eq(applications.id, event.applicationId), eq(applications.userId, userId)))
+      .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
       .get();
     if (!app) return { ok: false, message: "That application no longer exists." };
 
-    const status = liveProposal(event, app.status);
+    const status = liveProposal({ ...event, applicationId }, app.status);
     if (!status) return { ok: false, message: "There's nothing to change any more: the application has moved on. Dismiss it instead." };
 
     tx.update(applications)
       .set({ status, updatedAt: now })
-      .where(and(eq(applications.id, event.applicationId), eq(applications.userId, userId)))
+      .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
       .run();
-    // Records what was actually applied, for "Recently reviewed".
-    tx.update(emailEvents)
-      .set({ state: "confirmed", decidedAt: now, proposedStatus: status })
-      .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId)))
-      .run();
+    markConfirmed(applicationId, status);
     return { ok: true, status };
   });
 }
@@ -236,10 +332,12 @@ export function dismissSuggestion(db: AppDb, userId: number, id: number, now = n
   return updated ? { ok: true, status: null } : { ok: false, message: "That suggestion isn't waiting for review any more." };
 }
 
-// Links an email to an application you picked (or corrects a wrong link),
-// and works out its suggestion again for that application. Later emails
-// in the same thread follow the link.
-export function linkSuggestion(db: AppDb, userId: number, id: number, applicationId: number): DecideResult {
+export type LinkTarget = { kind: "application"; id: number } | { kind: "job"; id: number };
+
+// Links an email to an application or saved job you picked (or corrects a
+// wrong link), and works out its suggestion again for it. Later emails in
+// the same thread follow the link.
+export function linkSuggestion(db: AppDb, userId: number, id: number, target: LinkTarget): DecideResult {
   return db.transaction((tx) => {
     const event = tx
       .select({ emailType: emailEvents.emailType, source: emailEvents.source })
@@ -247,18 +345,73 @@ export function linkSuggestion(db: AppDb, userId: number, id: number, applicatio
       .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId), eq(emailEvents.state, "pending")))
       .get();
     if (!event || event.source !== "email") return { ok: false, message: "That suggestion can't be linked." };
+
+    const setLink = (values: { applicationId: number | null; jobId: number | null; proposedStatus: Status | null }) =>
+      tx.update(emailEvents)
+        .set({ ...values, matchMethod: "manual" })
+        .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId)))
+        .run();
+
+    if (target.kind === "job") {
+      const job = tx
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(and(eq(jobs.id, target.id), eq(jobs.userId, userId)))
+        .get();
+      if (!job) return { ok: false, message: "That saved job wasn't found." };
+      const proposed = proposeForSavedJob(event.emailType);
+      setLink({ applicationId: null, jobId: job.id, proposedStatus: proposed });
+      return { ok: true, status: proposed };
+    }
+
     const app = tx
       .select({ status: applications.status })
       .from(applications)
-      .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
+      .where(and(eq(applications.id, target.id), eq(applications.userId, userId)))
       .get();
     if (!app) return { ok: false, message: "That application wasn't found." };
-
     const proposed = proposeStatus(event.emailType, app.status);
+    setLink({ applicationId: target.id, jobId: null, proposedStatus: proposed });
+    return { ok: true, status: proposed };
+  });
+}
+
+// "Add as application": creates the job and application from an email
+// about one you never added, with the company, role, status, and date you
+// checked in the form. The email counts as confirmed: the status came
+// from it. Later emails in its thread follow the new application.
+export function addApplicationFromSuggestion(
+  db: AppDb,
+  userId: number,
+  id: number,
+  input: { company: string; title: string; status: Status; appliedAt: Date },
+  now = new Date(),
+): DecideResult {
+  return db.transaction((tx) => {
+    const event = tx
+      .select({ source: emailEvents.source, applicationId: emailEvents.applicationId, jobId: emailEvents.jobId })
+      .from(emailEvents)
+      .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId), eq(emailEvents.state, "pending")))
+      .get();
+    if (!event || event.source !== "email") return { ok: false, message: "That suggestion isn't waiting for review any more." };
+    if (event.applicationId !== null || event.jobId !== null) {
+      return { ok: false, message: "This email is already linked. Relink it or confirm it instead." };
+    }
+
+    const job = tx
+      .insert(jobs)
+      .values({ userId, company: input.company, title: input.title, source: "Email", savedAt: input.appliedAt })
+      .returning({ id: jobs.id })
+      .get();
+    const app = tx
+      .insert(applications)
+      .values({ userId, jobId: job.id, status: input.status, appliedAt: input.appliedAt, createdAt: now, updatedAt: now })
+      .returning({ id: applications.id })
+      .get();
     tx.update(emailEvents)
-      .set({ applicationId, matchMethod: "manual", proposedStatus: proposed })
+      .set({ applicationId: app.id, matchMethod: "manual", state: "confirmed", proposedStatus: input.status, decidedAt: now })
       .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId)))
       .run();
-    return { ok: true, status: proposed };
+    return { ok: true, status: input.status };
   });
 }

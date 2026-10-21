@@ -30,7 +30,7 @@ const INPUT: ClassifyInput = {
   application: { company: "Driftwood Analytics", title: "Full-Stack Developer" },
 };
 
-const VALID = { type: "interview", confidence: 0.92, reason: "Invites you to a call." };
+const VALID = { type: "interview", confidence: 0.92, reason: "Invites you to a call.", company: "Driftwood Analytics", role: null };
 
 describe("buildClassifyRequest", () => {
   it("tags the application and the email separately, at low effort", () => {

@@ -491,18 +491,32 @@ describe("email suggestions", () => {
     expect(await emailEventsDal.countPendingSuggestions()).toBe(0);
     expect((await emailEventsDal.confirm(alices.id)).ok).toBe(false);
     expect((await emailEventsDal.dismiss(alices.id)).ok).toBe(false);
-    expect((await emailEventsDal.link(alices.id, bobsApp.id)).ok).toBe(false);
+    expect((await emailEventsDal.link(alices.id, { kind: "application", id: bobsApp.id })).ok).toBe(false);
 
     // Bob's own email can't be linked to Alice's application either.
     insertEmailEvent(testDb, BOB, { source: "email", gmailMessageId: "bob-msg", subject: "Hi", emailType: "offer", confidence: 0.9 });
     const [bobs] = await emailEventsDal.listPendingSuggestions();
-    expect((await emailEventsDal.link(bobs.id, alicesApp.id)).ok).toBe(false);
+    expect((await emailEventsDal.link(bobs.id, { kind: "application", id: alicesApp.id })).ok).toBe(false);
+    // ...nor to Alice's saved job, and "Add as application" can't touch Alice's email.
+    as(ALICE);
+    const alicesSaved = await jobsDal.createSavedJob({ company: "Initech", title: "Analyst" });
+    as(BOB);
+    expect((await emailEventsDal.link(bobs.id, { kind: "job", id: alicesSaved.id })).ok).toBe(false);
+    const add = { company: "Hacked", title: "Hacked", status: "applied" as const, appliedAt: new Date() };
+    expect((await emailEventsDal.addAsApplication(alices.id, add)).ok).toBe(false);
+    // Alice's email that couldn't be classified isn't counted for Bob.
+    as(ALICE);
+    insertEmailEvent(testDb, ALICE, { source: "email", gmailMessageId: "alice-unclassified", subject: "?" });
+    expect(await emailEventsDal.countUnclassified()).toBe(1);
+    as(BOB);
+    expect(await emailEventsDal.countUnclassified()).toBe(0);
     // The same Gmail message id is a separate row per user.
     insertEmailEvent(testDb, BOB, { source: "email", gmailMessageId: "alice-msg", subject: "Same id" });
     expect(await emailEventsDal.countPendingSuggestions()).toBe(2);
 
     as(ALICE);
-    expect(await emailEventsDal.countPendingSuggestions()).toBe(1);
+    // Her suggestion and her unclassified email; none of Bob's.
+    expect(await emailEventsDal.countPendingSuggestions()).toBe(2);
     expect(await emailEventsDal.confirm(alices.id)).toEqual({ ok: true, status: "interviewing" });
     const [app] = await applicationsDal.listApplicationsWithJob();
     expect(app.status).toBe("interviewing");

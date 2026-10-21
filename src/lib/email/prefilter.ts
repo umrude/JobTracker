@@ -49,6 +49,21 @@ const SUBJECT_PATTERNS: readonly RegExp[] = [
   /\byour candidacy\b/i,
 ];
 
+// Phrases in Gmail's preview (the snippet) that point at hiring news even
+// when the subject doesn't, for applications you haven't added to the
+// tracker: "Quick question" from a company you never entered, opening
+// "Thanks for applying for the Product Designer role...". Stricter than
+// the subject patterns, since snippets are longer and more varied: each
+// phrase is one a non-hiring email rarely contains.
+const SNIPPET_PATTERNS: readonly RegExp[] = [
+  /\bthank(s| you) for (applying|your application)\b/i,
+  /\byour application (for|to)\b/i,
+  /\b(schedule|set up|book) (a|an|your) (phone screen|interview)\b/i,
+  /\bmov(e|ing) forward with (your application|other candidates)\b/i,
+  /\boffer (letter|of employment)\b/i,
+  /\b(take[- ]home|coding (assessment|challenge|test)|online assessment)\b/i,
+];
+
 // Gmail's own sorting: these tabs hold marketing and social mail. Company
 // newsletters and job-board alerts land here, and only a known ATS sender
 // overrides it.
@@ -56,7 +71,7 @@ const NOISE_LABELS = new Set(["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL"]);
 
 export type PrefilterResult = { candidate: boolean; reasons: string[] };
 
-// `companies` are the companies you've applied to.
+// `companies` are the companies of your applications and saved jobs.
 export function prefilter(email: EmailMeta, companies: readonly string[]): PrefilterResult {
   const reasons: string[] = [];
   const domain = senderDomain(email.fromAddress);
@@ -70,6 +85,7 @@ export function prefilter(email: EmailMeta, companies: readonly string[]): Prefi
 
   const pattern = SUBJECT_PATTERNS.find((p) => p.test(email.subject));
   if (pattern) reasons.push("subject");
+  if (SNIPPET_PATTERNS.some((p) => p.test(email.snippet))) reasons.push("snippet");
 
   const noise = email.labels.some((label) => NOISE_LABELS.has(label));
   const candidate = ats !== undefined || (!noise && reasons.length > 0);
@@ -105,8 +121,30 @@ export function mentionsCompany(text: string, company: string): boolean {
 // name, the subject, or the snippet, or as a label of the sender's domain
 // ("recruiting.northwindrobotics.example" for Northwind Robotics, its
 // name without spaces).
+//
+// A one-word name that's also an ordinary word ("Affirm", "Square",
+// "Ramp") would match "we affirm our commitment" in any email. So in the
+// subject and snippet, a one-word name only counts written the way you
+// capitalized it; the sender's name and domain are trusted as before.
 export function emailMentionsCompany(email: EmailMeta, company: string): boolean {
-  if (mentionsCompany(`${email.fromName} ${email.subject} ${email.snippet}`, company)) return true;
   const squashed = normalizeCompany(company).replaceAll(" ", "");
-  return squashed !== "" && senderDomain(email.fromAddress).split(".").includes(squashed);
+  if (squashed === "") return false;
+  if (mentionsCompany(email.fromName, company)) return true;
+  if (senderDomain(email.fromAddress).split(".").includes(squashed)) return true;
+  const text = `${email.subject} ${email.snippet}`;
+  return isOneWord(company) ? mentionsCapitalized(text, company.trim()) : mentionsCompany(text, company);
+}
+
+function isOneWord(company: string): boolean {
+  return !normalizeCompany(company).includes(" ");
+}
+
+// Exact capitalization, as a whole word ("Affirm", not "affirm" or
+// "Affirmation"). A name you typed in lowercase can't tell, so it matches
+// any capitalization.
+function mentionsCapitalized(text: string, company: string): boolean {
+  const word = company.replace(/[^\p{L}\p{N}]/gu, "");
+  if (word === "") return false;
+  if (word === word.toLowerCase()) return mentionsCompany(text, company);
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${word}($|[^\\p{L}\\p{N}])`, "u").test(text);
 }

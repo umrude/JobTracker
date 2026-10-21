@@ -97,10 +97,18 @@ export function createAnthropicClient(sdk: Anthropic, model: string): LlmClient 
           },
         };
       } catch (error) {
+        if (isOutOfCredits(error)) return llmError("out_of_credits");
         return llmError("api_error", apiErrorMessage(error));
       }
     },
   };
+}
+
+// Anthropic answers an empty balance with a 400 whose message says "Your
+// credit balance is too low...". Worth its own error: unlike a passing
+// failure, retrying won't help until you add credits.
+export function isOutOfCredits(error: unknown): boolean {
+  return error instanceof Anthropic.APIError && /credit balance/i.test(error.message);
 }
 
 // The SDK has already retried rate limits, 5xx errors, and connection

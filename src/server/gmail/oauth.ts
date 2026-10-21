@@ -124,6 +124,21 @@ export function isInvalidGrant(error: unknown): boolean {
   return typeof data === "object" && data !== null && "error" in data && data.error === "invalid_grant";
 }
 
+// The Retry-After header of a refused Google call, in seconds, if sent.
+// The response headers are a fetch Headers object or a plain record,
+// depending on the library version, so both are handled.
+export function retryAfterSeconds(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null || !("response" in error)) return undefined;
+  const response = error.response;
+  if (typeof response !== "object" || response === null || !("headers" in response)) return undefined;
+  const headers = response.headers;
+  let value: unknown;
+  if (headers instanceof Headers) value = headers.get("retry-after");
+  else if (typeof headers === "object" && headers !== null && "retry-after" in headers) value = headers["retry-after"];
+  const seconds = typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(seconds) ? seconds : undefined;
+}
+
 // The HTTP status of a failed Google call, if it has one.
 export function httpStatus(error: unknown): number | undefined {
   if (typeof error !== "object" || error === null) return undefined;

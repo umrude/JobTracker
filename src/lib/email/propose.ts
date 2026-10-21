@@ -1,5 +1,5 @@
 import { canTransition, type Status } from "@/lib/schemas/status";
-import type { EmailType } from "@/lib/schemas/email";
+import { STATUS_FOR_EMAIL_TYPE, type EmailType } from "@/lib/schemas/email";
 
 // Turns the classifier's answer into a suggested status change, given
 // where the application is now. This is code, not the model's judgment:
@@ -31,3 +31,11 @@ export function proposeStatus(type: EmailType | null, current: Status | null): S
 // relevant" is filed away instead of waiting for review, and the eval
 // reports accuracy above and below it.
 export const CONFIDENT_AT = 0.8;
+
+// For an email about a saved job (no application yet): the status to add
+// it to the board with. There's no current status to move forward from,
+// so it's simply what the email implies; a rejection still adds it (you
+// did apply), as Rejected.
+export function proposeForSavedJob(type: EmailType | null): Status | null {
+  return type === null ? null : STATUS_FOR_EMAIL_TYPE[type];
+}

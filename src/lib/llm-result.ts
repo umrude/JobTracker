@@ -4,6 +4,7 @@
 
 export type LlmErrorKind =
   | "missing_api_key"
+  | "out_of_credits"
   | "api_error"
   | "malformed_output"
   | "refusal"
@@ -17,6 +18,8 @@ export type LlmResult<T> = { ok: true; data: T } | { ok: false; error: LlmError 
 export const LLM_ERROR_MESSAGES: Record<LlmErrorKind, string> = {
   missing_api_key:
     "No Anthropic API key is configured. Set ANTHROPIC_API_KEY in .env to run comparisons.",
+  out_of_credits:
+    "Your Anthropic account is out of credits. Add credits at console.anthropic.com (Settings, Billing), then try again.",
   api_error: "The Anthropic API request failed. Try again in a moment.",
   malformed_output:
     "The model's response didn't match the expected format, even after a retry. Try running it again.",

@@ -4,7 +4,7 @@ vi.mock("@/server/env", () => ({
   env: { GOOGLE_CLIENT_ID: "test-client", GOOGLE_CLIENT_SECRET: "test-secret", APP_URL: "http://localhost:3000" },
 }));
 
-const { GMAIL_READONLY_SCOPE, grantsReadonly, gmailRedirectUri, httpStatus, isInvalidGrant, startConnect, statesMatch } =
+const { GMAIL_READONLY_SCOPE, grantsReadonly, gmailRedirectUri, httpStatus, isInvalidGrant, retryAfterSeconds, startConnect, statesMatch } =
   await import("@/server/gmail/oauth");
 
 describe("startConnect", () => {
@@ -52,5 +52,13 @@ describe("Google errors", () => {
     expect(httpStatus(Object.assign(new Error("x"), { status: 404 }))).toBe(404);
     expect(httpStatus(Object.assign(new Error("x"), { response: { status: 404 } }))).toBe(404);
     expect(httpStatus(new Error("x"))).toBeUndefined();
+  });
+
+  it("reads Retry-After from either header shape", () => {
+    const withHeaders = (headers: unknown) => Object.assign(new Error("429"), { response: { status: 429, headers } });
+    expect(retryAfterSeconds(withHeaders(new Headers({ "retry-after": "30" })))).toBe(30);
+    expect(retryAfterSeconds(withHeaders({ "retry-after": "12" }))).toBe(12);
+    expect(retryAfterSeconds(withHeaders({}))).toBeUndefined();
+    expect(retryAfterSeconds(new Error("x"))).toBeUndefined();
   });
 });

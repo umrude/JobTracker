@@ -11,6 +11,6 @@ export async function register() {
   if (process.env.DEMO_MODE === "true") return;
 
   const { seedDemoDatabase } = await import("@/server/db/seed");
-  const count = seedDemoDatabase();
+  const count = await seedDemoDatabase();
   console.log(`[instrumentation] Reseeded demo DB with ${count} jobs`);
 }

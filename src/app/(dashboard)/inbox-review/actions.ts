@@ -8,8 +8,9 @@ import { assertWritable, getMode } from "@/server/mode";
 import { env } from "@/server/env";
 import { requireSession } from "@/server/require-session";
 import { chooseSyncStart, removeGmailConnection } from "@/server/db/gmail-connections";
-import { confirm, dismiss, link } from "@/server/db/email-events";
-import type { DecideResult } from "@/server/db/email-event-store";
+import { addAsApplication, confirm, dismiss, link } from "@/server/db/email-events";
+import type { DecideResult, LinkTarget } from "@/server/db/email-event-store";
+import { statusSchema } from "@/lib/schemas/status";
 import {
   GMAIL_CALLBACK_PATH,
   GMAIL_OAUTH_COOKIE,
@@ -83,8 +84,25 @@ export async function chooseSyncStartAction(_prev: MessageState, formData: FormD
 // the page, the board, and the nav count.
 
 const suggestionIdSchema = z.object({ id: z.coerce.number().int().positive() });
+// The picker's value says what kind of thing it is: "app:12" for an
+// application, "job:5" for a saved job.
 const linkSchema = suggestionIdSchema.extend({
-  applicationId: z.coerce.number({ error: "Pick an application." }).int().positive("Pick an application."),
+  target: z
+    .string()
+    .regex(/^(app|job):\d+$/, "Pick an application or saved job.")
+    .transform((value): LinkTarget => {
+      const [kind, id] = value.split(":");
+      return { kind: kind === "app" ? "application" : "job", id: Number(id) };
+    }),
+});
+
+// "Add as application": what you checked in the prefilled form.
+const addFromEmailSchema = suggestionIdSchema.extend({
+  company: z.string().trim().min(1, "Company is required.").max(200),
+  title: z.string().trim().min(1, "Role is required.").max(200),
+  status: statusSchema,
+  // <input type="date"> sends "YYYY-MM-DD".
+  appliedOn: z.iso.date({ error: "Pick the date you applied." }),
 });
 
 async function decide(run: () => Promise<DecideResult>, success: string): Promise<MessageState> {
@@ -114,6 +132,21 @@ export async function linkSuggestionAction(_prev: MessageState, formData: FormDa
   await requireSession();
   assertWritable();
   const parsed = linkSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { status: "error", message: z.flattenError(parsed.error).fieldErrors.applicationId?.[0] ?? "Pick an application." };
-  return decide(() => link(parsed.data.id, parsed.data.applicationId), "Linked.");
+  if (!parsed.success) return { status: "error", message: "Pick an application or saved job." };
+  return decide(() => link(parsed.data.id, parsed.data.target), "Linked.");
+}
+
+export async function addAsApplicationAction(_prev: MessageState, formData: FormData): Promise<MessageState> {
+  await requireSession();
+  assertWritable();
+  const parsed = addFromEmailSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    const [first] = Object.values(z.flattenError(parsed.error).fieldErrors).flat();
+    return { status: "error", message: first ?? "Check the form." };
+  }
+  const { id, company, title, status, appliedOn } = parsed.data;
+  return decide(
+    () => addAsApplication(id, { company, title, status, appliedAt: new Date(`${appliedOn}T12:00:00Z`) }),
+    "Added to the board.",
+  );
 }

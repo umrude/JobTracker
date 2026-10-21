@@ -29,6 +29,11 @@ import { createSkillResolver } from "@/lib/skills/resolver";
 import { checkProposal } from "@/lib/tailoring/check";
 import { skillKey } from "@/lib/comparison-helpers";
 import type { Experience, Proficiency } from "@/lib/schemas/profile";
+import { defaultSyncStart } from "@/lib/email/sync-window";
+import { earliestAppliedAt } from "@/server/db/gmail-store";
+import { demoMailSource } from "@/server/gmail/demo-source";
+import { syncInbox } from "@/server/gmail/sync";
+import { demoClassification, DEMO_CLASSIFIER_MODEL } from "@/server/llm/classify-demo";
 
 const UNCOMPARED_SEED_JOB_URL = "https://pebblebrookhealth.example/careers/4410";
 // Gets a tailored resume draft in the seed, so the read-only public demo
@@ -308,10 +313,12 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     url: "https://larkspursystems.example/jobs/ops-22",
     listingText: "Run CI/CD and Kubernetes infrastructure for a fintech platform.",
     source: "Company site",
-    savedDaysAgo: 18,
+    // Long enough ago, with no email since, for the ghosted rule to fire
+    // in the demo (30 days of silence).
+    savedDaysAgo: 43,
     status: "acknowledged",
-    appliedDaysAgo: 17,
-    notes: "Recruiter screen scheduled for next week.",
+    appliedDaysAgo: 41,
+    notes: "Got the automated acknowledgement, then nothing.",
   },
   {
     company: "Marrow Biotech",
@@ -581,12 +588,13 @@ function seedTailoring(
 
 // Reusable by both the CLI entry point below and instrumentation.ts (which
 // reseeds on every dev-server restart so the local "writable demo preview"
-// cookie toggle always starts from a clean, known state).
-export function seedDemoDatabase(): number {
-  fs.rmSync(DEMO_DB_PATH, { force: true });
-  fs.mkdirSync(path.dirname(DEMO_DB_PATH), { recursive: true });
+// cookie toggle always starts from a clean, known state). Async because
+// the Gmail sync it runs is. The path is only overridden by tests.
+export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<number> {
+  fs.rmSync(dbPath, { force: true });
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-  const sqlite = new Database(DEMO_DB_PATH);
+  const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   const db = drizzle(sqlite, { schema });
 
@@ -681,10 +689,26 @@ export function seedDemoDatabase(): number {
         appliedAt: seedApp.appliedDaysAgo
           ? daysAgo(seedApp.appliedDaysAgo)
           : null,
+        // Last changed when applied, not "now": the ghosted rule counts a
+        // recent change as activity.
+        updatedAt: daysAgo(seedApp.appliedDaysAgo ?? seedApp.savedDaysAgo),
         notes: seedApp.notes,
       })
       .run();
   }
+
+  // Gmail suggestions, made by the real sync over the demo inbox with the
+  // canned classifications: the read-only public demo can't sync, so it
+  // ships already synced. The local preview can sync again (nothing new).
+  const now = new Date();
+  await syncInbox({
+    db,
+    userId: demoUser.id,
+    source: demoMailSource(now),
+    classify: async (email) => ({ ok: true, classification: demoClassification(email.id), model: DEMO_CLASSIFIER_MODEL }),
+    position: { historyId: null, since: defaultSyncStart(earliestAppliedAt(db, demoUser.id), now) },
+    now,
+  });
 
   sqlite.close();
   return SEED_SAVED_JOBS.length + SEED_APPLICATIONS.length;
@@ -698,6 +722,6 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  const count = seedDemoDatabase();
-  console.log(`Seeded ${count} jobs into ${DEMO_DB_PATH}`);
+  // .then, not top-level await: tsx runs this file as CommonJS.
+  void seedDemoDatabase().then((count) => console.log(`Seeded ${count} jobs into ${DEMO_DB_PATH}`));
 }

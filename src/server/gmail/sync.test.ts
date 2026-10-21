@@ -9,8 +9,9 @@ import { SEED_APPLICATIONS } from "@/server/db/seed";
 import { demoMailSource } from "@/server/gmail/demo-source";
 import { demoClassification } from "@/server/llm/classify-demo";
 import type { MailSource } from "@/server/gmail/mail-source";
-import { describeSync, syncInbox, type Classifier } from "@/server/gmail/sync";
+import { ClassifierUnavailable, describeReclassify, describeSync, reclassifyStored, syncInbox, type Classifier } from "@/server/gmail/sync";
 import {
+  addApplicationFromSuggestion,
   confirmSuggestion,
   dismissSuggestion,
   linkSuggestion,
@@ -68,7 +69,8 @@ describe("syncInbox on the demo inbox", () => {
   it("turns hiring email into suggestions, files away the sure not-relevant, and adds ghosted", async () => {
     const { summary, historyId } = await run();
     expect(historyId).toBe("demo");
-    expect(summary).toMatchObject({ read: 14, candidates: 9, hidden: 1, ghosted: 1, unclassified: 0, suggestions: 9 });
+    // 12 hiring emails: 11 waiting plus the recruiter filed away; plus Larkspur ghosted.
+    expect(summary).toMatchObject({ read: 17, candidates: 12, hidden: 1, ghosted: 1, unclassified: 0, suggestions: 12 });
 
     const rows = pending();
     // Changes first: the five that move an application, then the news.
@@ -93,7 +95,7 @@ describe("syncInbox on the demo inbox", () => {
 
   it("does nothing new on a second sync", async () => {
     const first = await run();
-    expect(describeSync(first.summary)).toBe("Read 14 emails, 9 about hiring: 9 new suggestions (1 ghosted) to review. 1 not relevant, filed away.");
+    expect(describeSync(first.summary)).toBe("Read 17 emails, 12 about hiring: 12 new suggestions (1 ghosted) to review. 1 not relevant, filed away.");
     const before = pending().length;
     const { summary } = await run();
     // The five non-hiring emails are read again (they're never stored);
@@ -125,7 +127,7 @@ describe("syncInbox edge cases", () => {
   it("treats a reply in a linked thread as a candidate even if the pre-filter wouldn't", async () => {
     await run();
     const reply = meta({ id: "reply", threadId: "t-driftwood", fromName: "Sam", fromAddress: "sam@example.com", subject: "Re: Scheduling", snippet: "Monday works" });
-    const classify: Classifier = async () => ({ ok: true, classification: { type: "interview", confidence: 0.9, reason: "Confirms a time." }, model: "test" });
+    const classify: Classifier = async () => ({ ok: true, classification: { type: "interview", confidence: 0.9, reason: "Confirms a time.", company: null, role: null }, model: "test" });
     const { summary } = await run({ source: sourceOf([reply]), classify });
     expect(summary.candidates).toBe(1);
     expect(pendingFor("Re: Scheduling")).toMatchObject({ applicationId: appIds.get("Driftwood Analytics"), matchMethod: "thread" });
@@ -172,7 +174,7 @@ describe("reviewing", () => {
   });
 
   it("links an unlinked email and works out its suggestion for that application", async () => {
-    const classify: Classifier = async () => ({ ok: true, classification: { type: "interview", confidence: 0.6, reason: "Asks for a call." }, model: "test" });
+    const classify: Classifier = async () => ({ ok: true, classification: { type: "interview", confidence: 0.6, reason: "Asks for a call.", company: null, role: null }, model: "test" });
     const email: EmailMeta = {
       id: "cold",
       threadId: "t-cold",
@@ -188,7 +190,127 @@ describe("reviewing", () => {
     expect(row).toMatchObject({ applicationId: null, proposedStatus: null });
     if (!row) return;
     const cobalt = appIds.get("Cobalt Harbor") ?? 0;
-    expect(linkSuggestion(db, USER, row.id, cobalt)).toEqual({ ok: true, status: "interviewing" });
+    expect(linkSuggestion(db, USER, row.id, { kind: "application", id: cobalt })).toEqual({ ok: true, status: "interviewing" });
     expect(pendingFor("Next steps")).toMatchObject({ applicationId: cobalt, matchMethod: "manual", proposedStatus: "interviewing" });
+  });
+});
+
+describe("applications you haven't added", () => {
+  it("links an email about a saved job, and confirming adds it to the board", async () => {
+    const job = db
+      .insert(schema.jobs)
+      .values({ userId: USER, company: "Northwind Robotics", title: "Senior Frontend Engineer", notes: "Tailored resume v2" })
+      .returning()
+      .get();
+    await run();
+    const row = pendingFor("Thanks for applying to Northwind Robotics");
+    expect(row).toMatchObject({ applicationId: null, jobId: job.id, proposedStatus: "acknowledged", company: "Northwind Robotics" });
+    if (!row) return;
+
+    expect(confirmSuggestion(db, USER, row.id, NOW)).toEqual({ ok: true, status: "acknowledged" });
+    const app = db.select().from(schema.applications).all().find((a) => a.jobId === job.id);
+    // Applied as of the email's date, with the saved job's notes moved over.
+    expect(app).toMatchObject({ status: "acknowledged", appliedAt: row.receivedAt, notes: "Tailored resume v2" });
+  });
+
+  it("offers never-added applications for adding, prefilled from the classifier", async () => {
+    await run();
+    const row = pendingFor("Thank you for applying to Pinecrest Labs");
+    expect(row).toMatchObject({ applicationId: null, jobId: null, extractedCompany: "Pinecrest Labs", extractedRole: "Frontend Engineer" });
+    if (!row) return;
+
+    const input = { company: "Pinecrest Labs", title: "Frontend Engineer", status: "acknowledged" as const, appliedAt: NOW };
+    expect(addApplicationFromSuggestion(db, USER, row.id, input, NOW)).toEqual({ ok: true, status: "acknowledged" });
+    expect(addApplicationFromSuggestion(db, USER, row.id, input, NOW).ok).toBe(false);
+    const job = db.select().from(schema.jobs).all().find((j) => j.company === "Pinecrest Labs");
+    expect(db.select().from(schema.applications).all().find((a) => a.jobId === job?.id)).toMatchObject({ status: "acknowledged" });
+    expect(recentlyDecidedRows(db, USER).find((r) => r.id === row.id)).toMatchObject({ state: "confirmed", company: "Pinecrest Labs" });
+  });
+
+  it("settles two near-identical roles with the role the classifier read in the body", async () => {
+    for (const title of ["Senior Software Engineer, Frontend (Auth Experiences)", "Senior Software Engineer, Frontend (App Experience)"]) {
+      const job = db.insert(schema.jobs).values({ userId: USER, company: "Affirm", title }).returning().get();
+      db.insert(schema.applications).values({ userId: USER, jobId: job.id, status: "applied", appliedAt: NOW, updatedAt: NOW }).run();
+    }
+    const email: EmailMeta = {
+      id: "affirm-ack",
+      threadId: "t-affirm",
+      fromAddress: "no-reply@greenhouse-mail.io",
+      fromName: "Affirm",
+      subject: "Thank you for applying to Affirm",
+      snippet: "We've received your application.",
+      receivedAt: NOW,
+      labels: ["INBOX"],
+    };
+    const classify: Classifier = async () => ({
+      ok: true,
+      classification: { type: "acknowledged", confidence: 0.95, reason: "Confirms receipt.", company: "Affirm", role: "Senior Software Engineer, Frontend (App Experience)" },
+      model: "test",
+    });
+    await run({ source: { listSince: async () => ({ messages: [email], historyId: "h", truncated: false }), listNew: async () => null, body: async () => "" }, classify });
+    expect(pendingFor("Thank you for applying to Affirm")).toMatchObject({ title: "Senior Software Engineer, Frontend (App Experience)", matchMethod: "company_title" });
+  });
+});
+
+describe("when the classifier can't work at all", () => {
+  it("stops without storing the batch, and a later sync picks up where it stopped", async () => {
+    const broke: Classifier = async () => ({
+      ok: false,
+      message: "Your Anthropic account is out of credits.",
+      stopSync: { reason: "out_of_credits" },
+    });
+    await expect(run({ classify: broke })).rejects.toBeInstanceOf(ClassifierUnavailable);
+    // Nothing stored as "Couldn't classify", so nothing is stuck.
+    expect(db.select().from(schema.emailEvents).all()).toEqual([]);
+
+    // After adding credits: everything is classified.
+    const { summary } = await run();
+    expect(summary).toMatchObject({ candidates: 12, unclassified: 0 });
+  });
+});
+
+describe("Classify again", () => {
+  // How emails were stored before an empty balance stopped the sync: each
+  // one "Couldn't classify", and never retried.
+  const oldFailure: Classifier = async () => ({ ok: false, message: "The Anthropic API request failed. Try again in a moment." });
+  const unclassified = () => pending().filter((row) => row.source === "email" && row.emailType === null);
+
+  it("classifies the stored ones without re-reading the inbox, and files away the sure not-relevant", async () => {
+    await run({ classify: oldFailure });
+    expect(unclassified()).toHaveLength(12);
+
+    const summary = await reclassifyStored({ db, userId: USER, classify: demoClassifier, now: NOW });
+    expect(summary).toEqual({ retried: 12, classified: 11, hidden: 1, stillUnclassified: 0 });
+    expect(unclassified()).toHaveLength(0);
+    // The same suggestions a working sync would have made.
+    expect(pendingFor("Update on your application")).toMatchObject({ emailType: "rejection", proposedStatus: "rejected", matchMethod: "thread" });
+    expect(pendingFor("Thank you for applying to Pinecrest Labs")).toMatchObject({ extractedCompany: "Pinecrest Labs" });
+    expect(recentlyDecidedRows(db, USER).map((r) => r.subject)).toContain("Interview request: Senior Frontend Engineer role");
+    expect(describeReclassify(summary)).toBe("Classified 11 of 12 emails. 1 not relevant, filed away.");
+  });
+
+  it("keeps a link you made by hand", async () => {
+    await run({ classify: oldFailure });
+    const row = pendingFor("Thank you for applying to Pinecrest Labs");
+    const cobalt = appIds.get("Cobalt Harbor") ?? 0;
+    if (!row) throw new Error("missing");
+    linkSuggestion(db, USER, row.id, { kind: "application", id: cobalt });
+    await reclassifyStored({ db, userId: USER, classify: demoClassifier, now: NOW });
+    expect(pendingFor("Thank you for applying to Pinecrest Labs")).toMatchObject({ applicationId: cobalt, matchMethod: "manual" });
+  });
+
+  it("stops if the credits run out again, and finishes the rest next time", async () => {
+    await run({ classify: oldFailure });
+    let calls = 0;
+    const runsOut: Classifier = async (email, about) => {
+      calls++;
+      return calls <= 4 ? demoClassifier(email, about) : { ok: false, message: "Out of credits.", stopSync: { reason: "out_of_credits" } };
+    };
+    await expect(reclassifyStored({ db, userId: USER, classify: runsOut, now: NOW })).rejects.toBeInstanceOf(ClassifierUnavailable);
+    // The first batch of four was saved before the stop.
+    expect(unclassified()).toHaveLength(8);
+    const summary = await reclassifyStored({ db, userId: USER, classify: demoClassifier, now: NOW });
+    expect(summary.retried).toBe(8);
+    expect(unclassified()).toHaveLength(0);
   });
 });

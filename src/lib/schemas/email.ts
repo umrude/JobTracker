@@ -73,14 +73,30 @@ export const classificationOutputSchema = z.object({
   reason: z
     .string()
     .describe("One short sentence on why, for the person reviewing. Under 25 words. No personal details."),
+  company: z
+    .string()
+    .nullable()
+    .describe(
+      "The hiring company the email is about, as the email names it. Not the applicant-tracking system, job board, or recruiting agency. Null if not stated.",
+    ),
+  role: z.string().nullable().describe("The job title the email is about, as the email words it. Null if not stated."),
 });
 
 const MAX_REASON_CHARS = 200;
+const MAX_NAME_CHARS = 120;
+
+// Trimmed, with an empty answer counted as none.
+function cleanName(value: string | null): string | null {
+  const trimmed = (value ?? "").trim().replace(/\s+/g, " ").slice(0, MAX_NAME_CHARS);
+  return trimmed === "" ? null : trimmed;
+}
 
 export const classificationSchema = classificationOutputSchema.transform((raw) => ({
   type: raw.type,
   confidence: Number.isFinite(raw.confidence) ? Math.min(1, Math.max(0, raw.confidence)) : 0,
   reason: raw.reason.trim().replace(/\s+/g, " ").slice(0, MAX_REASON_CHARS),
+  company: cleanName(raw.company),
+  role: cleanName(raw.role),
 }));
 
 export type Classification = z.output<typeof classificationSchema>;

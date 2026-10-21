@@ -2,6 +2,7 @@
 // scripts/eval-classifier.ts and tested on their own.
 import type { EmailMeta, EmailType } from "@/lib/schemas/email";
 import { CONFIDENT_AT } from "@/lib/email/propose";
+import { normalizeCompany } from "@/lib/email/prefilter";
 import { parseFrom } from "@/server/gmail/parse";
 import type { ClassifyInput } from "@/server/llm/classify-email";
 import type { EvalCase } from "@/server/llm/classify-eval-cases";
@@ -41,6 +42,12 @@ export type EvalOutcome = {
   actual: EmailType | null;
   confidence: number | null;
   reason: string;
+  // The company and role the classifier read, and what the case expects
+  // (undefined: not scored).
+  company?: string | null;
+  role?: string | null;
+  expectedCompany?: string | null;
+  expectedRole?: string | null;
 };
 
 export type EvalReport = {
@@ -53,7 +60,17 @@ export type EvalReport = {
   confident: { count: number; correct: number };
   unsure: { count: number; correct: number };
   misses: EvalOutcome[];
+  // The company and role read correctly, out of the cases that state them.
+  // Reported separately: a miss only means editing a prefilled field.
+  extraction: { checked: number; company: number; role: number };
 };
+
+// Same name, ignoring case, punctuation, and legal suffixes; both null
+// (the email doesn't say) also counts.
+function sameName(actual: string | null | undefined, expected: string | null): boolean {
+  if (expected === null) return actual === null || actual === undefined;
+  return actual !== null && actual !== undefined && normalizeCompany(actual) === normalizeCompany(expected);
+}
 
 // The same "sure" threshold sync uses.
 export { CONFIDENT_AT };
@@ -73,6 +90,7 @@ export function scoreEval(outcomes: readonly EvalOutcome[]): EvalReport {
   const confident = { count: 0, correct: 0 };
   const unsure = { count: 0, correct: 0 };
   const misses: EvalOutcome[] = [];
+  const extraction = { checked: 0, company: 0, role: 0 };
   let correct = 0;
   let failed = 0;
 
@@ -86,6 +104,11 @@ export function scoreEval(outcomes: readonly EvalOutcome[]): EvalReport {
       perType[outcome.expected].correct++;
     } else {
       misses.push(outcome);
+    }
+    if (outcome.expectedCompany !== undefined && outcome.expectedRole !== undefined && outcome.actual !== null) {
+      extraction.checked++;
+      if (sameName(outcome.company, outcome.expectedCompany)) extraction.company++;
+      if (sameName(outcome.role, outcome.expectedRole)) extraction.role++;
     }
     if (outcome.confidence !== null) {
       const bucket = outcome.confidence >= CONFIDENT_AT ? confident : unsure;
@@ -103,5 +126,6 @@ export function scoreEval(outcomes: readonly EvalOutcome[]): EvalReport {
     confident,
     unsure,
     misses,
+    extraction,
   };
 }

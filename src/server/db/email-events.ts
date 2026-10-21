@@ -5,12 +5,16 @@ import { requireUserId } from "@/server/current-user";
 import {
   confirmSuggestion,
   dismissSuggestion,
+  addApplicationFromSuggestion,
   linkSuggestion,
   pendingSuggestionCount,
   pendingSuggestionRows,
   recentlyDecidedRows,
+  unclassifiedCount,
   type DecideResult,
+  type LinkTarget,
 } from "@/server/db/email-event-store";
+import type { Status } from "@/lib/schemas/status";
 
 // The app's entry points for reviewing suggestions: the current mode's
 // database and the current user. Ids from forms only ever reach your own
@@ -35,6 +39,12 @@ export async function countPendingSuggestions(): Promise<number> {
   return pendingSuggestionCount(db, userId);
 }
 
+// Emails stored as "Couldn't classify", for the "Classify again" button.
+export async function countUnclassified(): Promise<number> {
+  const { db, userId } = await scope();
+  return unclassifiedCount(db, userId);
+}
+
 export async function confirm(id: number): Promise<DecideResult> {
   const { db, userId } = await scope();
   return confirmSuggestion(db, userId, id);
@@ -45,7 +55,15 @@ export async function dismiss(id: number): Promise<DecideResult> {
   return dismissSuggestion(db, userId, id);
 }
 
-export async function link(id: number, applicationId: number): Promise<DecideResult> {
+export async function link(id: number, target: LinkTarget): Promise<DecideResult> {
   const { db, userId } = await scope();
-  return linkSuggestion(db, userId, id, applicationId);
+  return linkSuggestion(db, userId, id, target);
+}
+
+export async function addAsApplication(
+  id: number,
+  input: { company: string; title: string; status: Status; appliedAt: Date },
+): Promise<DecideResult> {
+  const { db, userId } = await scope();
+  return addApplicationFromSuggestion(db, userId, id, input);
 }

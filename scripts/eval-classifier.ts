@@ -1,4 +1,4 @@
-// Runs the email classifier against the eval set (40 synthetic emails with
+// Runs the email classifier against the eval set (45 synthetic emails with
 // known answers) using the real model, and reports accuracy, per-type
 // results, calibration, misses, and what the run cost. Spends real API
 // credit, so it's a script you run on purpose, never part of `pnpm test`.
@@ -74,8 +74,18 @@ async function main() {
     }
     usage.inputTokens += result.data.usage?.inputTokens ?? 0;
     usage.outputTokens += result.data.usage?.outputTokens ?? 0;
-    const { type, confidence, reason } = result.data.classification;
-    return { id: testCase.id, expected: testCase.expected, actual: type, confidence, reason };
+    const { type, confidence, reason, company, role } = result.data.classification;
+    return {
+      id: testCase.id,
+      expected: testCase.expected,
+      actual: type,
+      confidence,
+      reason,
+      company,
+      role,
+      expectedCompany: testCase.company,
+      expectedRole: testCase.role,
+    };
   }
 
   const concurrency = Math.max(1, Number(values.concurrency) || 4);
@@ -102,6 +112,16 @@ async function main() {
     `\nCalibration: right ${pct(report.confident.correct, report.confident.count)} of the time at confidence >= ${CONFIDENT_AT} (${report.confident.count} answers), ` +
       `${pct(report.unsure.correct, report.unsure.count)} below it (${report.unsure.count} answers).`,
   );
+
+  if (report.extraction.checked > 0) {
+    const { checked, company, role } = report.extraction;
+    console.log(`\nCompany and role (prefill for "Add as application"): company ${company}/${checked}, role ${role}/${checked}.`);
+    for (const outcome of outcomes) {
+      if (outcome.expectedCompany === undefined || outcome.actual === null) continue;
+      if (outcome.company === outcome.expectedCompany && outcome.role === outcome.expectedRole) continue;
+      console.log(`- ${outcome.id}: read "${outcome.company}" / "${outcome.role}", expected "${outcome.expectedCompany}" / "${outcome.expectedRole}"`);
+    }
+  }
 
   if (report.misses.length > 0) {
     console.log("\nMisses:");

@@ -21,7 +21,7 @@ const email = (overrides: Partial<EmailMeta>): EmailMeta => ({
 });
 
 describe("prefilter on the demo inbox", () => {
-  it("keeps the hiring news, including tricky cases", () => {
+  it("keeps the hiring news, including tricky cases and applications you never added", () => {
     expect(candidateIds).toEqual([
       "demo-cobalt-ack",
       "demo-fenwick-ack",
@@ -32,6 +32,9 @@ describe("prefilter on the demo inbox", () => {
       "demo-hearthstone-offer",
       "demo-ironclad-reject",
       "demo-recruiter-outreach",
+      "demo-northwind-ack",
+      "demo-pinecrest-ack",
+      "demo-alderfinch-interview",
     ]);
   });
 
@@ -67,5 +70,33 @@ describe("company names", () => {
   it("matches whole names only", () => {
     expect(mentionsCompany("Larkspur Logistics all-hands", "Larkspur Systems")).toBe(false);
     expect(mentionsCompany("Your application to Fenwick and Vale", "Fenwick & Vale")).toBe(true);
+  });
+});
+
+describe("one-word company names that are also words", () => {
+  const affirm = (overrides: Partial<EmailMeta>) => prefilter(email(overrides), ["Affirm"]).reasons;
+
+  it("counts the name as you capitalized it, not the ordinary word", () => {
+    expect(affirm({ snippet: "We affirm our commitment to your privacy." })).not.toContain("company:Affirm");
+    expect(affirm({ subject: "Your interview with Affirm" })).toContain("company:Affirm");
+    expect(affirm({ subject: "Affirmations for the week" })).not.toContain("company:Affirm");
+  });
+
+  it("still trusts the sender's name and domain", () => {
+    expect(affirm({ fromName: "affirm recruiting" })).toContain("company:Affirm");
+    expect(affirm({ fromAddress: "jobs@affirm.example" })).toContain("company:Affirm");
+  });
+
+  it("matches any capitalization of a name you typed in lowercase", () => {
+    expect(prefilter(email({ subject: "News from Initech" }), ["initech"]).reasons).toContain("company:initech");
+  });
+});
+
+describe("hiring phrases in the snippet", () => {
+  it("catches a vague subject with a clear snippet, outside Promotions", () => {
+    const vague = { subject: "Quick question", snippet: "Thanks for applying for the Product Designer role! Free for a call?" };
+    expect(prefilter(email(vague), []).candidate).toBe(true);
+    expect(prefilter(email({ ...vague, labels: ["CATEGORY_PROMOTIONS"] }), []).candidate).toBe(false);
+    expect(prefilter(email({ subject: "Quick question", snippet: "Are you free for a call about the lease?" }), []).candidate).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ghostedCandidates, type GhostedInput } from "@/lib/email/ghosted";
-import { matchApplication, mentionsTitle, type MatchableApplication } from "@/lib/email/matching";
+import { matchApplication, matchByClassifier, mentionsTitle, pickByTitle, type MatchableApplication } from "@/lib/email/matching";
 import type { EmailMeta } from "@/lib/schemas/email";
 import { SEED_APPLICATIONS } from "@/server/db/seed";
 import { demoInbox } from "@/server/gmail/demo-inbox";
@@ -122,5 +122,73 @@ describe("ghostedCandidates", () => {
     expect(ghostedCandidates([app({ ghostedPending: true })], now)).toEqual([]);
     expect(ghostedCandidates([app({ ghostedDismissedAt: daysAgo(5) })], now)).toEqual([]);
     expect(ghostedCandidates([app({ appliedAt: daysAgo(80), updatedAt: daysAgo(80), ghostedDismissedAt: daysAgo(35) })], now)).toEqual([1]);
+  });
+});
+
+describe("two nearly identical roles at one company", () => {
+  const affirm = [
+    { id: 1, company: "Affirm", title: "Senior Software Engineer, Frontend (Auth Experiences)" },
+    { id: 2, company: "Affirm", title: "Senior Software Engineer, Frontend (App Experience)" },
+  ];
+  const email = (subject: string, snippet = ""): EmailMeta => ({
+    id: "x",
+    threadId: "t",
+    fromAddress: "no-reply@greenhouse-mail.io",
+    fromName: "Affirm",
+    subject,
+    snippet,
+    receivedAt: new Date(),
+    labels: ["INBOX"],
+  });
+
+  it("tells them apart by the full title, however it's punctuated", () => {
+    expect(matchApplication(email("Your application: Senior Software Engineer, Frontend (Auth Experiences)"), affirm, new Map())).toEqual({
+      applicationId: 1,
+      method: "company_title",
+    });
+    expect(matchApplication(email("Senior Software Engineer - Frontend - App Experience: next steps"), affirm, new Map())).toMatchObject({
+      applicationId: 2,
+    });
+  });
+
+  it("tells them apart by the words that differ", () => {
+    const snippet = "Thanks for applying to the Auth Experiences team. We'll review your application.";
+    expect(matchApplication(email("Thank you for applying to Affirm", snippet), affirm, new Map())).toMatchObject({ applicationId: 1 });
+  });
+
+  it("leaves it to you when only the shared part of the title is there, or both roles' words are", () => {
+    expect(matchApplication(email("Senior Software Engineer, Frontend at Affirm"), affirm, new Map())).toEqual({
+      applicationId: null,
+      candidates: [1, 2],
+    });
+    const both = "Thanks for applying to the Auth Experiences team. Tell us about your app experience.";
+    expect(matchApplication(email("Thank you for applying", both), affirm, new Map()).applicationId).toBeNull();
+  });
+
+  it("can be settled by the role the classifier read in the body", () => {
+    const match = matchByClassifier(
+      { company: "Affirm", role: "Senior Software Engineer, Frontend (App Experience)" },
+      affirm,
+      affirm,
+    );
+    expect(match).toMatchObject({ target: { id: 2 }, method: "company_title" });
+  });
+
+  it("finds the company the classifier read when only the body named it", () => {
+    const targets = [...affirm, { id: 3, company: "Initech", title: "Analyst" }];
+    expect(matchByClassifier({ company: "Initech, Inc.", role: null }, targets, [])).toMatchObject({ target: { id: 3 }, method: "company" });
+    expect(matchByClassifier({ company: "Affirm", role: null }, targets, [])).toMatchObject({ target: null, candidates: affirm });
+    expect(matchByClassifier({ company: null, role: "Analyst" }, targets, [])).toEqual({ target: null, candidates: [] });
+  });
+});
+
+describe("pickByTitle", () => {
+  it("prefers the full title, then the title without parentheses", () => {
+    const roles = [
+      { company: "Acme", title: "Backend Engineer (Node.js)" },
+      { company: "Acme", title: "Backend Engineer (Go)" },
+    ];
+    expect(pickByTitle("Backend Engineer (Go) interview", roles)).toBe(roles[1]);
+    expect(pickByTitle("Backend Engineer interview", roles)).toBeUndefined();
   });
 });

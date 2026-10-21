@@ -8,7 +8,7 @@ Phase 4. How the app reads your inbox for news about your applications and turns
 | 4b | Connect Gmail (OAuth), encrypted tokens, the Gmail client | Done |
 | 4c | Classifier, demo classifications, eval set and script | Done |
 | 4d | Sync route, review inbox, confirm and dismiss | Done |
-| 4e | Demo seed, docs, end-to-end check | Planned |
+| 4e | Demo seed, docs, end-to-end check | Done |
 
 ## The flow
 
@@ -136,7 +136,9 @@ Sync reads email through one interface, `MailSource`, with three methods:
 There are two implementations, and sync (Step 4d) is written once against the interface:
 
 - **Gmail** (`live-source.ts`):
-  - `messages.list` with an `after:` query (skipping sent mail, drafts, and chats), then `messages.get` with `format=metadata` for the sender, subject, snippet, and labels. A few requests run at a time.
+  - `messages.list` with an `after:` query (skipping sent mail, drafts, and chats), then `messages.get` with `format=metadata` for the sender, subject, snippet, and labels.
+  - **Promotions and Social are skipped in the query itself**, except mail from an applicant-tracking system. That's the pre-filter's own rule, applied before anything is read, so a first sync reads far fewer messages.
+  - **Paced to Gmail's quota** (`quota.ts`). Gmail meters each user in quota units per minute (15,000 by default). Reading a message costs 5, so at most 3,000 reads a minute. A token bucket holds every call to 200 units a second (80% of the limit). A refusal anyway (HTTP 429, or a 403 quota error) is waited out (Google's `Retry-After`, else exponential backoff) and retried up to 5 times. Without this, a first sync asked for about 24,000 units a minute and Google cut it off with "Quota exceeded ... Units per minute per user".
   - `listNew` uses the **history API** (`history.list`, `messageAdded`), so a later sync costs only what arrived since.
   - Gmail keeps about a week of history. If it's gone (404), `listNew` returns null and sync falls back to `listSince`.
   - The history id is read *before* listing, so mail arriving mid-sync is picked up next time rather than missed.
@@ -302,3 +304,107 @@ The actions:
 Suggestions that change something come first, then news, newest first. "Recently reviewed" lists the last ten decisions, including what was filed away automatically. The nav shows how many are waiting.
 
 Every action re-checks on the server that the suggestion is yours and still pending. Isolation tests cover listing, confirming, dismissing, and linking across two users, including linking your email to someone else's application.
+
+## Step 4e: the demo, and checking it end to end
+
+### The demo arrives already synced
+
+The public demo is read-only, so it can't sync: `pnpm db:seed` (and every local dev-server start) runs the real `syncInbox` over the demo inbox with the canned classifications. The demo opens on an Inbox with **9 suggestions**:
+
+| Kind | Suggestions |
+|---|---|
+| Changes | Cobalt Harbor and Fenwick & Vale acknowledged; Driftwood Analytics to Interviewing; Fenwick & Vale rejected (linked only by its thread); **Larkspur Systems ghosted** |
+| News (no change) | Marrow's assessment and Solstice's reschedule (already Interviewing), Hearthstone's offer (already at Offer), Ironclad's rejection (already Rejected) |
+
+The cold recruiter was filed away automatically, and shows under "Recently reviewed".
+
+Two seed changes made that possible:
+
+- **Larkspur Systems** was applied to 41 days ago, with no email since, so the ghosted rule fires. Its note now reads "Got the automated acknowledgement, then nothing."
+- **Seeded applications' `updatedAt`** is their applied date. It used to default to the moment of seeding, which counts as activity and would stop the ghosted rule from ever firing in the demo.
+
+In the local preview (writable), you can confirm, dismiss, link, and sync again. Syncing again reads the five non-hiring emails and finds nothing new.
+
+### Checks
+
+- **`src/server/db/seed.test.ts`** seeds a temporary database and checks:
+  - 9 waiting suggestions, changes first;
+  - exactly one ghosted suggestion, for Larkspur;
+  - the recruiter filed away.
+- **The public demo, run for real** (`pnpm build`, then `DEMO_MODE=true pnpm start`):
+  - The Inbox page renders all 9 cards with the nav count.
+  - `POST /api/sync` is refused with 403 ("Syncing is disabled in the read-only demo.").
+  - The Gmail callback redirects with "unavailable".
+  - Every other page still renders.
+- **Not checked end to end:** the live round trip with Google (connect, a real sync, an expired token) needs your browser and account. The pieces are tested individually:
+  - the OAuth URL, state, and scope checks;
+  - token encryption;
+  - the history fallback;
+  - the pipeline, with the mail source swapped for the demo one.
+
+  Try it with your own inbox using the setup steps in Step 4b.
+
+### Trying it with your Gmail
+
+1. Do the one-time setup in Step 4b and set `TOKEN_ENCRYPTION_KEY` and `ANTHROPIC_API_KEY`.
+2. **Inbox → Connect Gmail.** Pick a start date if the default isn't right.
+3. **Sync now.** The first sync reads everything since the start date (up to 2,000 messages), so it takes a while. Later ones are quick.
+4. Review. After 7 days (while the Google app is in Testing), you'll see **Reconnect Gmail**. Reconnecting the same address picks up where it left off.
+
+## After Phase 4: edge cases
+
+### Applications you haven't added
+
+Email about a job that isn't on the board shows up in one of three ways:
+
+- **A saved job you applied to but didn't move to Applied.** Matching covers saved jobs as well as applications, so the email links to it. The card offers **Add to board as Acknowledged** (or whatever the email implies).
+  - Confirming creates the application as of the email's date, with the saved job's notes moved over, like "Move to Applied" on the Saved jobs page.
+  - A rejection still adds it, as Rejected: you did apply.
+- **A job you never entered at all.** The card has **Add as a new application**, prefilled with:
+  - the company and role the classifier read in the email;
+  - the status the email implies;
+  - the date it arrived.
+
+  You check the fields and save. The email counts as confirmed, and later replies in its thread follow the new application.
+- **Pick it yourself.** The link picker lists likely matches first (same company), then every application, then every saved job.
+
+**Reading the company and role.** The classifier now also returns the hiring company and job title, in the email's own words, or null when the email doesn't say. It's told that mail through Greenhouse, Workday, or HackerRank comes from the company named in it, not the service, and that a recruiting agency's client is only named if the email names it. These values only ever prefill a form you check.
+
+**The pre-filter** couldn't recognize a company you never entered. It now also looks for a few specific hiring phrases in Gmail's preview, not just the subject: "thanks for applying", "your application for", "schedule an interview", "moving forward with other candidates", "offer letter", "take-home". So "Quick question" from a company you never entered, opening "Thanks for applying for the Product Designer role...", gets through. The phrases are deliberately narrow, since every candidate costs a model call, and Promotions and Social still don't count.
+
+### Near-identical roles at one company
+
+Two applications at Affirm, "Senior Software Engineer, Frontend (Auth Experiences)" and "Senior Software Engineer, Frontend (App Experience)", used to be indistinguishable: matching ignored the parenthesized part of a title. Matching now tries, most specific first, and each step must single out exactly one role:
+
+1. **The full title**, qualifier included, however it's punctuated ("Senior Software Engineer - Frontend - App Experience" matches).
+2. **The title without its parenthesized part**, for roles whose titles differ before the parentheses.
+3. **The words that differ**: "auth" and "experiences" against "app" and "experience". If both roles' own words appear (say "Auth Experiences team" and "your app experience"), it's left to you.
+4. **The role the classifier read**, after classification. That comes from the whole body, not just the preview, and settles most ATS acknowledgements, whose subject is only "Thank you for applying to Affirm". The same step finds the company when only the body names it.
+
+If none of these settles it, the email waits unlinked with both roles at the top of the picker. A wrong link is worse than none. After you link the first email in a thread, later replies follow it.
+
+**Saved jobs and applications are matched together**, so one Affirm application and one saved Affirm role are told apart the same way rather than mixed up.
+
+**One-word company names that are ordinary words** ("Affirm", "Square", "Ramp") would match "we affirm our commitment" in any email. In the subject and preview, a one-word name now only counts with the capitalization you typed. The sender's name and domain are trusted as before.
+
+### Running out of Anthropic credits
+
+When the account is out of credits, Anthropic refuses every call ("Your credit balance is too low..."). That used to come back as a generic API error, and sync stored each email as "Couldn't classify". Since every email is processed once, those emails would never have been classified, even after topping up.
+
+Now:
+
+- The LLM client recognizes it as its own error, `out_of_credits`, with the message "Your Anthropic account is out of credits. Add credits at console.anthropic.com (Settings, Billing)". Comparisons, tailoring, and cover letters show it too.
+- **Account-level failures stop the sync instead of being stored**: out of credits, a missing or rejected key, or the API unreachable after the SDK's own retries. Nothing from the batch that hit the failure is stored, and the sync position isn't saved. Emails stored before it are skipped next time, and the rest are classified then. So **adding credits and syncing again picks up exactly where it stopped**.
+- The Sync button says so: "Sync stopped: your Anthropic account is out of credits... Nothing was skipped: add credits..., then sync again."
+- Problems with one email (a refusal, or malformed output twice) are still stored as "Couldn't classify", so one odd email can't block every sync.
+
+### Classify again
+
+Emails already stored as "Couldn't classify" (from before this, or from a one-off failure) don't fix themselves: sync processes each email once. When there are any, the Inbox shows a **Classify again** card. It posts to `/api/sync/reclassify`, which runs `reclassifyStored`:
+
+- **Only the stored emails.** The inbox isn't re-read. Each body is fetched again for the model, since bodies were never stored.
+- **Same steps as sync.** The classification, matching, proposal, and filing rules are the same code (`classifiedFields`), so a retried email ends up exactly where a working sync would have put it. A sure "not relevant" is filed away; the rest wait for review.
+- **Links are kept or redone.** Emails already linked keep their link, and a link you made yourself stays marked as yours. Unlinked ones are matched again, now with saved jobs, near-identical roles, and the company and role the classifier reads.
+- **The same stop rule as sync.** If the credits run out again partway, the emails done so far stay done, and Classify again finishes the rest next time.
+
+Cost: one model call and one Gmail read (5 quota units) per email. On Haiku, about $0.0003 an email, so about 4 cents for 125.

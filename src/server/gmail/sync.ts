@@ -7,8 +7,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as schema from "@/server/db/schema";
 import type { Classification, EmailMeta } from "@/lib/schemas/email";
 import { prefilter } from "@/lib/email/prefilter";
-import { matchApplication } from "@/lib/email/matching";
-import { proposeStatus, CONFIDENT_AT } from "@/lib/email/propose";
+import { matchByClassifier, matchEmail, type Match, type MatchTarget } from "@/lib/email/matching";
+import { proposeForSavedJob, proposeStatus, CONFIDENT_AT } from "@/lib/email/propose";
 import { ghostedCandidates, GHOSTED_AFTER_DAYS } from "@/lib/email/ghosted";
 import {
   applicationsForSync,
@@ -16,17 +16,46 @@ import {
   insertEmailEvent,
   linkedThreads,
   processedMessageIds,
+  savedJobsForSync,
+  unclassifiedEmailRows,
+  updateEmailEvent,
   type SyncApplication,
+  type SyncSavedJob,
 } from "@/server/db/email-event-store";
 import type { MailSource } from "@/server/gmail/mail-source";
 
 type AppDb = BetterSQLite3Database<typeof schema>;
 
-export type ClassifyOutcome = { ok: true; classification: Classification; model: string } | { ok: false; message: string };
+export type ClassifyOutcome =
+  | { ok: true; classification: Classification; model: string }
+  // stopSync: the classifier can't work at all right now (out of credits,
+  // no or rejected API key, API unreachable), as opposed to one email it
+  // couldn't answer. The sync stops instead of storing every email as
+  // "Couldn't classify", which would never be retried.
+  | { ok: false; message: string; stopSync?: { reason: "out_of_credits" | "unavailable" } };
 
-// Classifies one candidate. Live: fetch the body, ask the model. Demo:
-// look up the canned answer.
-export type Classifier = (email: EmailMeta, application: SyncApplication | null) => Promise<ClassifyOutcome>;
+// Thrown when the classifier can't work at all. Nothing from the batch
+// that hit it is stored and the sync position isn't saved, so syncing
+// again (after adding credits, say) picks up exactly where it stopped:
+// emails stored before it are skipped, the rest are classified then.
+export class ClassifierUnavailable extends Error {
+  constructor(
+    readonly reason: "out_of_credits" | "unavailable",
+    message: string,
+  ) {
+    super(message);
+    this.name = "ClassifierUnavailable";
+  }
+}
+
+// Classifies one candidate, given what matching linked it to (if
+// anything). Live: fetch the body, ask the model. Demo: look up the canned
+// answer.
+export type Classifier = (email: EmailMeta, about: MatchTarget | null) => Promise<ClassifyOutcome>;
+
+// What an email can be about: an application, or a saved job you applied
+// to but haven't moved to Applied.
+type Target = ({ kind: "application" } & SyncApplication) | ({ kind: "job" } & SyncSavedJob);
 
 export type SyncPosition = {
   // From the last sync; null before the first.
@@ -78,20 +107,20 @@ export async function syncInbox(deps: {
   const seen = processedMessageIds(db, userId, batch.messages.map((m) => m.id));
   const fresh = batch.messages.filter((m) => !seen.has(m.id)).sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime());
 
-  // 3. Pre-filter and match, in order. A reply in a thread that's already
-  // linked is a candidate even if the pre-filter wouldn't keep it: "Re:
-  // Scheduling ... Monday works" names no company and no hiring phrase.
-  const apps = applicationsForSync(db, userId);
-  const companies = [...new Set(apps.map((app) => app.company))];
-  const threads = linkedThreads(db, userId);
-  const byId = new Map(apps.map((app) => [app.id, app]));
-  const planned: { email: EmailMeta; app: SyncApplication | null; method: ReturnType<typeof matchApplication> }[] = [];
+  // 3. Pre-filter and match, in order. Applications and saved jobs are
+  // matched together, so one application and one saved job at the same
+  // company are told apart by title rather than mixed up. A reply in a
+  // thread that's already linked is a candidate even if the pre-filter
+  // wouldn't keep it: "Re: Scheduling ... Monday works" names no company
+  // and no hiring phrase.
+  const { targets, threadTargets } = loadTargets(db, userId);
+  const companies = [...new Set(targets.map((t) => t.company))];
+  const planned: { email: EmailMeta; match: Match<Target> }[] = [];
   for (const email of fresh) {
-    if (!prefilter(email, companies).candidate && !threads.has(email.threadId)) continue;
-    const match = matchApplication(email, apps, threads);
-    const app = match.applicationId === null ? null : (byId.get(match.applicationId) ?? null);
-    if (app) threads.set(email.threadId, app.id);
-    planned.push({ email, app, method: match });
+    if (!prefilter(email, companies).candidate && !threadTargets.has(email.threadId)) continue;
+    const match = matchEmail(email, targets, threadTargets.get(email.threadId));
+    if (match.target) threadTargets.set(email.threadId, match.target);
+    planned.push({ email, match });
   }
 
   // 4. Classify, a few at a time, and store each as it's answered.
@@ -107,14 +136,16 @@ export async function syncInbox(deps: {
   };
   for (let i = 0; i < planned.length; i += CLASSIFY_CONCURRENCY) {
     const chunk = planned.slice(i, i + CLASSIFY_CONCURRENCY);
-    const outcomes = await Promise.all(chunk.map(({ email, app }) => classify(email, app)));
-    chunk.forEach(({ email, app, method }, index) => {
+    const outcomes = await Promise.all(chunk.map(({ email, match }) => classify(email, match.target)));
+    for (const outcome of outcomes) {
+      if (!outcome.ok && outcome.stopSync) throw new ClassifierUnavailable(outcome.stopSync.reason, outcome.message);
+    }
+    chunk.forEach(({ email, match: headerMatch }, index) => {
       const outcome = outcomes[index];
-      const classification = outcome.ok ? outcome.classification : null;
-      // A sure "not relevant" is kept (so it isn't processed again) but
-      // filed as dismissed. An unsure one waits for you like the rest.
-      const hide = classification?.type === "not_relevant" && classification.confidence >= CONFIDENT_AT;
-      if (hide) summary.hidden++;
+      const fields = classifiedFields(outcome, headerMatch, targets, now);
+      const target = fields.target;
+      if (target) threadTargets.set(email.threadId, target);
+      if (fields.hide) summary.hidden++;
       else summary.suggestions++;
       if (!outcome.ok) summary.unclassified++;
 
@@ -127,18 +158,7 @@ export async function syncInbox(deps: {
         subject: email.subject,
         snippet: email.snippet,
         receivedAt: email.receivedAt,
-        applicationId: app?.id ?? null,
-        matchMethod: "method" in method ? method.method : null,
-        emailType: classification?.type ?? null,
-        confidence: classification?.confidence ?? null,
-        reason: outcome.ok ? outcome.classification.reason : `Couldn't classify: ${outcome.message}`,
-        proposedStatus: proposeStatus(classification?.type ?? null, app?.status ?? null),
-        model: outcome.ok ? outcome.model : null,
-        state: hide ? "dismissed" : "pending",
-        // The same instant for both: that's how review tells "filed away
-        // automatically" from "you dismissed it".
-        createdAt: now,
-        decidedAt: hide ? now : null,
+        ...fields.values,
       });
     });
   }
@@ -163,7 +183,132 @@ export async function syncInbox(deps: {
   return { summary, historyId: batch.historyId };
 }
 
+// What emails can be about, and the threads already linked to one.
+function loadTargets(db: AppDb, userId: number) {
+  const targets: Target[] = [
+    ...applicationsForSync(db, userId).map((app) => ({ kind: "application" as const, ...app })),
+    ...savedJobsForSync(db, userId).map((job) => ({ kind: "job" as const, ...job })),
+  ];
+  const threadTargets = new Map<string, Target>();
+  for (const [thread, applicationId] of linkedThreads(db, userId)) {
+    const target = targets.find((t) => t.kind === "application" && t.id === applicationId);
+    if (target) threadTargets.set(thread, target);
+  }
+  return { targets, threadTargets };
+}
+
+// What gets stored for a classified (or unclassifiable) email: the link,
+// the answer, the proposal, and whether it's filed away. Shared by sync and
+// "Classify again", so the two can't drift apart.
+function classifiedFields(outcome: ClassifyOutcome, headerMatch: Match<Target>, targets: readonly Target[], now: Date) {
+  const classification = outcome.ok ? outcome.classification : null;
+  // Not settled from the headers: try the company and role the classifier
+  // read in the body.
+  const match =
+    headerMatch.target === null && classification ? matchByClassifier(classification, targets, headerMatch.candidates) : headerMatch;
+  const target = match.target;
+  // A sure "not relevant" is kept (so it isn't processed again) but filed
+  // as dismissed. An unsure one waits for you like the rest.
+  const hide = classification?.type === "not_relevant" && classification.confidence >= CONFIDENT_AT;
+  const type = classification?.type ?? null;
+  return {
+    target,
+    hide,
+    values: {
+      applicationId: target?.kind === "application" ? target.id : null,
+      jobId: target?.kind === "job" ? target.id : null,
+      matchMethod: match.target ? match.method : null,
+      emailType: type,
+      confidence: classification?.confidence ?? null,
+      extractedCompany: classification?.company ?? null,
+      extractedRole: classification?.role ?? null,
+      reason: outcome.ok ? outcome.classification.reason : `Couldn't classify: ${outcome.message}`,
+      proposedStatus:
+        target?.kind === "application" ? proposeStatus(type, target.status) : target?.kind === "job" ? proposeForSavedJob(type) : null,
+      model: outcome.ok ? outcome.model : null,
+      state: hide ? ("dismissed" as const) : ("pending" as const),
+      // The same instant for both: that's how review tells "filed away
+      // automatically" from "you dismissed it".
+      createdAt: now,
+      decidedAt: hide ? now : null,
+    },
+  };
+}
+
+export type ReclassifySummary = { retried: number; classified: number; hidden: number; stillUnclassified: number };
+
+// "Classify again": retries the stored emails the classifier couldn't
+// answer (say, while the account was out of credits), without re-reading
+// the inbox. Their bodies are fetched again (they were never stored), and
+// ones that weren't linked are matched again with what the classifier
+// reads. Rows already linked keep their link. Like sync, an account-level
+// failure (ClassifierUnavailable) stops it: rows done so far stay done,
+// and running it again finishes the rest.
+export async function reclassifyStored(deps: {
+  db: AppDb;
+  userId: number;
+  classify: Classifier;
+  now: Date;
+}): Promise<ReclassifySummary> {
+  const { db, userId, classify, now } = deps;
+  const rows = unclassifiedEmailRows(db, userId);
+  const { targets, threadTargets } = loadTargets(db, userId);
+  const summary: ReclassifySummary = { retried: rows.length, classified: 0, hidden: 0, stillUnclassified: 0 };
+
+  const planned = rows.map((row) => {
+    const email: EmailMeta = {
+      id: row.gmailMessageId ?? "",
+      threadId: row.gmailThreadId ?? "",
+      fromAddress: row.fromAddress ?? "",
+      fromName: row.fromName ?? "",
+      subject: row.subject ?? "",
+      snippet: row.snippet ?? "",
+      receivedAt: row.receivedAt ?? row.createdAt,
+      labels: [],
+    };
+    // Already linked (by sync or by you): keep that link. Otherwise match
+    // again, now that matching knows saved jobs and near-identical roles.
+    const linked =
+      row.applicationId !== null
+        ? targets.find((t) => t.kind === "application" && t.id === row.applicationId)
+        : targets.find((t) => t.kind === "job" && t.id === row.jobId);
+    if (linked && row.matchMethod) {
+      // The method here is a placeholder: the stored one is kept below.
+      return { row, email, match: { target: linked, method: "company" } satisfies Match<Target>, keepMethod: row.matchMethod };
+    }
+    return { row, email, match: matchEmail(email, targets, threadTargets.get(email.threadId)), keepMethod: null };
+  });
+
+  for (let i = 0; i < planned.length; i += CLASSIFY_CONCURRENCY) {
+    const chunk = planned.slice(i, i + CLASSIFY_CONCURRENCY);
+    const outcomes = await Promise.all(chunk.map(({ email, match }) => classify(email, match.target)));
+    for (const outcome of outcomes) {
+      if (!outcome.ok && outcome.stopSync) throw new ClassifierUnavailable(outcome.stopSync.reason, outcome.message);
+    }
+    chunk.forEach(({ row, email, match, keepMethod }, index) => {
+      const outcome = outcomes[index];
+      const fields = classifiedFields(outcome, match, targets, now);
+      if (fields.target) threadTargets.set(email.threadId, fields.target);
+      if (!outcome.ok) summary.stillUnclassified++;
+      else if (fields.hide) summary.hidden++;
+      else summary.classified++;
+      // A link you made by hand stays marked as yours.
+      updateEmailEvent(db, userId, row.id, { ...fields.values, matchMethod: keepMethod ?? fields.values.matchMethod });
+    });
+  }
+  return summary;
+}
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// One sentence for the "Classify again" button.
+export function describeReclassify(summary: ReclassifySummary): string {
+  if (summary.retried === 0) return "Nothing to classify again.";
+  const parts = [`Classified ${summary.classified} of ${plural(summary.retried, "email")}.`];
+  if (summary.hidden > 0) parts.push(`${summary.hidden} not relevant, filed away.`);
+  if (summary.stillUnclassified > 0) parts.push(`${summary.stillUnclassified} still couldn't be classified.`);
+  return parts.join(" ");
+}
 
 // One sentence for the Sync button to show.
 export function describeSync(summary: SyncSummary): string {

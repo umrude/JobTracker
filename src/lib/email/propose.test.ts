@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { proposeStatus } from "@/lib/email/propose";
+import { proposeForSavedJob, proposeStatus } from "@/lib/email/propose";
 
 describe("proposeStatus", () => {
   it("moves an application forward", () => {
@@ -27,5 +27,15 @@ describe("proposeStatus", () => {
     expect(proposeStatus("not_relevant", "applied")).toBeNull();
     expect(proposeStatus(null, "applied")).toBeNull();
     expect(proposeStatus("offer", null)).toBeNull();
+  });
+});
+
+describe("proposeForSavedJob", () => {
+  it("adds a saved job to the board at the status the email implies", () => {
+    expect(proposeForSavedJob("acknowledged")).toBe("acknowledged");
+    expect(proposeForSavedJob("assessment")).toBe("interviewing");
+    expect(proposeForSavedJob("rejection")).toBe("rejected");
+    expect(proposeForSavedJob("not_relevant")).toBeNull();
+    expect(proposeForSavedJob(null)).toBeNull();
   });
 });
