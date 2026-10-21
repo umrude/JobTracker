@@ -17,13 +17,8 @@ import { classifyEmail } from "@/server/llm/classify-email";
 import { CLASSIFIER_EVAL_CASES, type EvalCase } from "@/server/llm/classify-eval-cases";
 import { CONFIDENT_AT, evalCaseInput, scoreEval, type EvalOutcome } from "@/server/llm/classify-eval";
 import { EMAIL_TYPES } from "@/lib/schemas/email";
+import { costUsd } from "@/lib/llm-pricing";
 
-// Dollars per million tokens (input, output), for the cost line.
-const PRICES: Record<string, [number, number]> = {
-  "claude-haiku-5-5": [0.1, 0.5],
-  "claude-sonnet-5-5": [2, 10],
-  "claude-opus-5-5": [4, 20],
-};
 
 const { values } = parseArgs({
   options: {
@@ -131,8 +126,8 @@ async function main() {
     }
   }
 
-  const price = PRICES[values.model];
-  const cost = price ? ` ≈ $${((usage.inputTokens * price[0] + usage.outputTokens * price[1]) / 1_000_000).toFixed(4)}` : "";
+  const dollars = costUsd(values.model, usage.inputTokens, usage.outputTokens);
+  const cost = dollars === null ? "" : ` ≈ ${dollars.toFixed(4)}`;
   console.log(`\nTokens: ${usage.inputTokens.toLocaleString("en-US")} in, ${usage.outputTokens.toLocaleString("en-US")} out${cost}`);
 
   const minAccuracy = Number(values["min-accuracy"]);

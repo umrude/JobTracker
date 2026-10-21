@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/resume", label: "Resume" },
   { href: "/profile", label: "Profile" },
   { href: "/inbox-review", label: "Inbox" },
+  { href: "/insights", label: "Insights" },
 ] as const;
 
 // A Client Component only because it highlights the current page, which

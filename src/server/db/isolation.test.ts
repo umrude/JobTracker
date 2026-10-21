@@ -637,3 +637,31 @@ describe("insights", () => {
     expect(alices.skills.map((s) => [s.name, s.missing])).toEqual([["Kubernetes", 1], ["React", 0]]);
   });
 });
+
+describe("compare all", () => {
+  it("compares only your own jobs that need it, in batches, and stops without a resume", async () => {
+    const insightsService = await import("@/server/insights");
+    as(ALICE);
+    for (const company of ["A1", "A2", "A3", "A4"]) await jobsDal.createSavedJob({ company, title: "Dev", listingText: "Build things." });
+    await jobsDal.createSavedJob({ company: "NoListing", title: "Dev" });
+    as(BOB);
+    await jobsDal.createSavedJob({ company: "B1", title: "Dev", listingText: "Build things." });
+
+    state.mode = "demo";
+    as(ALICE);
+    // No resume yet: the run stops, nothing compared.
+    expect(await insightsService.compareNextBatch([])).toMatchObject({ compared: 0, stopped: expect.stringMatching(/resume/) });
+    await resumesDal.createResumeVersion("alice", null);
+
+    const plan = await insightsService.getCompareAllPlan();
+    expect(plan).toMatchObject({ count: 4, estimateUsd: 0, demo: true });
+    const first = await insightsService.compareNextBatch([]);
+    expect(first).toMatchObject({ compared: insightsService.COMPARE_BATCH, remaining: 4 - insightsService.COMPARE_BATCH, stopped: null });
+    const second = await insightsService.compareNextBatch([]);
+    expect(second).toMatchObject({ compared: 1, remaining: 0 });
+
+    // Bob's job was never touched.
+    as(BOB);
+    expect((await insightsService.getCompareAllPlan()).count).toBe(1);
+  });
+});

@@ -6,7 +6,7 @@ Phase 5. A recap of which skills your applications keep asking for that your res
 |---|---|---|
 | 5a | Listings for every application, "passed screening", listing fingerprints | Done |
 | 5b | The insight numbers (pure, tested) | Done |
-| 5c | The Insights page, and comparing several jobs at once | Planned |
+| 5c | The Insights page, and comparing several jobs at once | Done |
 | 5d | Demo seed, docs, end-to-end check | Planned |
 
 ## Decisions
@@ -107,3 +107,54 @@ Only applications, and only among listings that asked for the skill. A skill's r
 - **The screening split:** rejections divide into **after screening** (you marked it passed) and **stage unknown**. It's shown once at least 5 rejections are known to have passed screening (`SCREENING_MIN`); before that, one line says how many.
 
 Counts, never causes: the page shows both sides and leaves the reading to you.
+
+## Step 5c: the page
+
+Code: `app/(dashboard)/insights/` (the page, its action, and the Compare all button) and `lib/llm-pricing.ts`. The page is a Server Component: every number is computed on the server. Only "Compare all" runs in the browser.
+
+### What's on it, top to bottom
+
+- **Scope:** all compared listings, or applications only (`?scope=applied`, parsed with Zod, so anything else falls back to all).
+- **Coverage:**
+  - how many listings are analyzed;
+  - notes on comparisons that predate a listing edit or used an older resume;
+  - **Compare all (N)** for jobs with a listing but no comparison;
+  - a collapsed list of jobs without a listing, linking to where to add one.
+- **Outcomes:** rejected (with ghosted inside), progressed, and waiting, among analyzed applications. Under them, how many rejections are known to have passed screening, and either the split or the one line saying it shows from 5.
+- **"In your profile, but not on your resume":** the skills listings asked for that your resume didn't show but your profile has. The most actionable list on the page, since a tailored resume can bring them forward.
+- **Most often missing:** the top 25. Each row shows:
+  - how many of the listings that asked for it your resume was missing it in;
+  - where it stands in your profile;
+  - "missing in x of n" among rejected and progressed applications, with ghosted shown inside rejected;
+  - "too few to compare" under 5 on either side;
+  - with enough screening data, columns for after screening and stage unknown.
+- **The fine print:** counts from your own comparisons, not causes, and small numbers say very little.
+
+### Compare all
+
+A full run can be over a hundred comparisons at 15 to 40 seconds each, far too long for one request. So the page runs **batches**: each call compares the next 3 jobs in parallel, and the page loops, refreshing the numbers after each batch, with a **Stop** button that takes effect after the batch in progress.
+
+**Before it starts**, a confirm step names:
+
+- the number of jobs;
+- the model (`ANTHROPIC_MODEL`);
+- **an estimated cost**: about four characters per token for the listing and resume, plus the instructions and a generous allowance for the output and the model's thinking, priced from `lib/llm-pricing.ts`. It errs high: roughly 5 cents a comparison on Opus 5.5.
+
+The same price table now serves the classifier eval's cost line.
+
+**Each batch picks its own jobs** on the server. The browser sends only the ids of jobs that already failed in this run, so one listing the model can't handle isn't retried forever. Ids that aren't yours are simply never among the jobs it looks at.
+
+**Like Gmail sync, account-level failures stop the run:** out of credits, no or rejected API key, the API unreachable, or no active resume. Whatever was compared before that is saved, and running it again continues. Per-job failures are listed with their reason.
+
+The read-only public demo disables the button. The local demo preview compares with canned results, for free.
+
+### Tests
+
+`isolation.test.ts` runs Compare all for two users in demo mode:
+
+- it stops without a resume;
+- the plan's count and free demo estimate;
+- batches of 3 until none remain;
+- the other user's job never touched.
+
+`llm-pricing.test.ts` covers prices and the estimate.

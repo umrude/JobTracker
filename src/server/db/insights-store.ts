@@ -95,3 +95,23 @@ export function insightInputs(db: AppDb, userId: number): { jobs: InsightJob[]; 
     profileSkills: skills.map((skill) => ({ key: resolver.resolve(skill.name).key, learning: skill.proficiency === "learning" })),
   };
 }
+
+// The jobs "Compare all" would compare: a listing, no comparison yet. With
+// their listing text, for the cost estimate.
+export function jobsToCompare(db: AppDb, userId: number): { jobId: number; company: string; listingText: string }[] {
+  const compared = new Set(
+    db
+      .select({ jobId: comparisons.jobId })
+      .from(comparisons)
+      .where(and(eq(comparisons.userId, userId), isNull(comparisons.tailoringId)))
+      .all()
+      .map((row) => row.jobId),
+  );
+  return db
+    .select({ jobId: jobs.id, company: jobs.company, listingText: jobs.listingText })
+    .from(jobs)
+    .where(eq(jobs.userId, userId))
+    .orderBy(desc(jobs.savedAt), desc(jobs.id))
+    .all()
+    .flatMap((job) => (job.listingText?.trim() && !compared.has(job.jobId) ? [{ ...job, listingText: job.listingText }] : []));
+}
