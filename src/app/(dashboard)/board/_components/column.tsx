@@ -1,10 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS, type Status } from "@/lib/schemas/status";
-import type { ApplicationWithJob } from "@/server/db/applications";
+import type { ApplicationSummary } from "@/server/db/applications";
 import { ApplicationCard } from "./application-card";
+
+// Cards rendered per column before "Show more".
+const COLUMN_PAGE = 20;
 
 export function Column({
   status,
@@ -12,10 +17,16 @@ export function Column({
   disabled,
 }: {
   status: Status;
-  applications: ApplicationWithJob[];
+  applications: ApplicationSummary[];
   disabled: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status, disabled });
+  // Long columns (Rejected, after a while) render the newest cards first
+  // and the rest on request: every card is a draggable with listeners, so
+  // hundreds at once slow the page down. See docs/performance.md.
+  const [shown, setShown] = useState(COLUMN_PAGE);
+  const visible = applications.slice(0, shown);
+  const hidden = applications.length - visible.length;
 
   return (
     <div
@@ -32,13 +43,18 @@ export function Column({
         </span>
       </h2>
       <div className="flex min-h-16 flex-col gap-2">
-        {applications.map((application) => (
+        {visible.map((application) => (
           <ApplicationCard
             key={application.id}
             application={application}
             disabled={disabled}
           />
         ))}
+        {hidden > 0 && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setShown((n) => n + COLUMN_PAGE)}>
+            Show {Math.min(hidden, COLUMN_PAGE)} more ({hidden} hidden)
+          </Button>
+        )}
       </div>
     </div>
   );

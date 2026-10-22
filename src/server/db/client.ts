@@ -13,7 +13,7 @@ type DbInstance = BetterSQLite3Database<typeof schema>;
 const instances = new Map<Mode, DbInstance>();
 
 function resolvePath(mode: Mode): string {
-  return mode === "demo" ? DEMO_DB_PATH : env.DATABASE_PATH;
+  return mode === "demo" ? (env.DEMO_DATABASE_PATH ?? DEMO_DB_PATH) : env.DATABASE_PATH;
 }
 
 function openDb(dbPath: string): DbInstance {

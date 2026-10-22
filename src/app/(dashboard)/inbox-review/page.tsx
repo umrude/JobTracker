@@ -1,12 +1,14 @@
+import Link from "next/link";
+import { z } from "zod";
 import { MailIcon, TriangleAlertIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 import { isWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
 import { getGmailStatus, type GmailStatus } from "@/server/db/gmail-connections";
 import { countUnclassified, listPendingSuggestions, listRecentlyDecided } from "@/server/db/email-events";
-import { listApplicationsWithJob } from "@/server/db/applications";
+import { listApplicationSummaries } from "@/server/db/applications";
 import { listSavedJobs } from "@/server/db/jobs";
 import type { SuggestionRow } from "@/server/db/email-event-store";
 import { matchByClassifier, matchEmail } from "@/lib/email/matching";
@@ -19,7 +21,7 @@ import { connectGmailAction, disconnectGmailAction } from "./actions";
 import { SyncStartForm } from "./_components/sync-start-form";
 import { SyncButton } from "./_components/sync-button";
 import { SuggestionCard } from "./_components/suggestion-card";
-import type { LinkGroup } from "./_components/suggestion-actions";
+import { LinkChoicesProvider, type LinkOption } from "./_components/link-choices";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 const dateTimeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
@@ -30,13 +32,18 @@ const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 
 type Choice = { value: string; label: string; company: string; title: string };
 
-// The link picker's choices for one email: likely matches first (the same
-// matching sync uses, run on what's stored: sender, subject, snippet, and
-// the company and role the classifier read), then every application, then
-// every saved job. Two near-identical roles at one company end up side by
-// side at the top.
-function linkGroups(row: SuggestionRow, apps: Choice[], jobs: Choice[]): LinkGroup[] {
-  const all = [...apps, ...jobs];
+// Suggestions shown at first, and added per "Show more".
+const PAGE_SIZE = 25;
+const showSchema = z.coerce.number().int().min(PAGE_SIZE).max(5000).catch(PAGE_SIZE);
+
+const strip = ({ value, label }: Choice): LinkOption => ({ value, label });
+
+// One email's likely matches, listed first in its link picker: the same
+// matching sync uses, run on what's stored (sender, subject, snippet, and
+// the company and role the classifier read). Two near-identical roles at
+// one company end up side by side at the top. Every other choice comes
+// from the page's shared list.
+function likelyMatches(row: SuggestionRow, all: Choice[]): LinkOption[] {
   let likely: Choice[] = [];
   if (row.source === "email") {
     const email = {
@@ -56,12 +63,7 @@ function linkGroups(row: SuggestionRow, apps: Choice[], jobs: Choice[]): LinkGro
         : byHeaders;
     likely = match.target ? [match.target] : match.candidates;
   }
-  const strip = ({ value, label }: Choice) => ({ value, label });
-  return [
-    { label: "Likely", options: likely.map(strip) },
-    { label: "Applications", options: apps.map(strip) },
-    { label: "Saved jobs", options: jobs.map(strip) },
-  ];
+  return likely.map(strip);
 }
 
 // A Server Component: the connection and the suggestions are read at
@@ -70,25 +72,28 @@ function linkGroups(row: SuggestionRow, apps: Choice[], jobs: Choice[]): LinkGro
 export default async function InboxReviewPage({ searchParams }: PageProps<"/inbox-review">) {
   await requireSession();
 
-  const { gmail } = await searchParams;
+  const { gmail, show } = await searchParams;
+  const showCount = showSchema.parse(show);
   const notice = parseGmailNotice(gmail);
   const status = await getGmailStatus();
   const writable = isWritable();
   const [pending, decided, applications, savedJobs, unclassified] = await Promise.all([
     listPendingSuggestions(),
     listRecentlyDecided(),
-    listApplicationsWithJob(),
+    listApplicationSummaries(),
     listSavedJobs(),
     countUnclassified(),
   ]);
   const byLabel = (a: Choice, b: Choice) => a.label.localeCompare(b.label);
   const appChoices: Choice[] = applications
-    .map((app) => ({ value: `app:${app.id}`, label: `${app.job.company} · ${app.job.title}`, company: app.job.company, title: app.job.title }))
+    .map((app) => ({ value: `app:${app.id}`, label: `${app.company} · ${app.title}`, company: app.company, title: app.title }))
     .sort(byLabel);
   const jobChoices: Choice[] = savedJobs
     .map((job) => ({ value: `job:${job.id}`, label: `${job.company} · ${job.title}`, company: job.company, title: job.title }))
     .sort(byLabel);
   const gmailAccount = status.kind === "connected" ? status.email : null;
+  const allChoices = [...appChoices, ...jobChoices];
+  const visible = pending.slice(0, showCount);
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
@@ -142,18 +147,31 @@ export default async function InboxReviewPage({ searchParams }: PageProps<"/inbo
             Nothing to review. Sync to check for new email.
           </p>
         ) : (
+          <LinkChoicesProvider applications={appChoices.map(strip)} savedJobs={jobChoices.map(strip)}>
           <ul className="grid gap-2">
-            {pending.map((row) => (
+            {visible.map((row) => (
               <li key={row.id}>
                 <SuggestionCard
                   row={row}
-                  linkGroups={linkGroups(row, appChoices, jobChoices)}
+                  likely={likelyMatches(row, allChoices)}
                   gmailAccount={gmailAccount}
                   writable={writable}
                 />
               </li>
             ))}
           </ul>
+          {pending.length > visible.length && (
+            // A link, not a client button: the server renders the next
+            // page of cards, so only what's on screen is ever sent.
+            <Link
+              href={`/inbox-review?show=${showCount + PAGE_SIZE}`}
+              scroll={false}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Show {Math.min(PAGE_SIZE, pending.length - visible.length)} more ({pending.length - visible.length} not shown)
+            </Link>
+          )}
+          </LinkChoicesProvider>
         )}
       </section>
 

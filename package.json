@@ -14,7 +14,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/server/db/seed.ts",
     "demo:pdfs": "tsx scripts/build-demo-pdfs.ts",
-    "eval:classifier": "tsx --conditions=react-server --env-file=.env scripts/eval-classifier.ts"
+    "eval:classifier": "tsx --conditions=react-server --env-file=.env scripts/eval-classifier.ts",
+    "perf:seed": "tsx scripts/perf-seed.ts",
+    "perf:measure": "tsx scripts/perf-measure.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

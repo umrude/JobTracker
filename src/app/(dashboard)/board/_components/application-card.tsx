@@ -11,14 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { ApplicationWithJob } from "@/server/db/applications";
+import type { ApplicationSummary } from "@/server/db/applications";
 import { ApplicationForm } from "./application-form";
 
 export function ApplicationCard({
   application,
   disabled,
 }: {
-  application: ApplicationWithJob;
+  application: ApplicationSummary;
   disabled: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -42,12 +42,13 @@ export function ApplicationCard({
     >
       <CardHeader className="px-3">
         <CardTitle className="text-sm leading-snug">
-          {application.job.title}
+          {application.title}
         </CardTitle>
         <CardAction>
           <ApplicationForm
             mode="edit"
-            application={application}
+            applicationId={application.id}
+            company={application.company}
             disabled={disabled}
             trigger={
               <Button
@@ -67,13 +68,13 @@ export function ApplicationCard({
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-1.5 px-3 text-xs text-muted-foreground">
-        <p>{application.job.company}</p>
-        {(application.passedScreeningAt || !application.job.listingText) && (
+        <p>{application.company}</p>
+        {(application.passedScreening || !application.hasListing) && (
           <p className="flex flex-wrap gap-1">
-            {application.passedScreeningAt && (
+            {application.passedScreening && (
               <span className="rounded-full border px-1.5 py-px">Passed screening</span>
             )}
-            {!application.job.listingText && (
+            {!application.hasListing && (
               // A title, not a tooltip component: it's a quiet hint on a
               // draggable card, and native titles don't fight the drag.
               <span

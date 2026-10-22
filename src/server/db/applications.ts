@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { getMode } from "@/server/mode";
 import { requireUserId } from "@/server/current-user";
@@ -35,6 +35,56 @@ export async function listApplicationsWithJob() {
 export type ApplicationWithJob = Awaited<
   ReturnType<typeof listApplicationsWithJob>
 >[number];
+
+// What a list of applications needs (the board's cards, pickers, the
+// Compare page): no listing text or notes. The board is a Client
+// Component, so everything it's given is sent to the browser; with real
+// listings (3,000 to 10,000 characters each), full rows made the board
+// megabytes. "Has a listing" is worked out in SQL instead.
+// See docs/performance.md.
+export async function listApplicationSummaries() {
+  const { db, userId } = await scope();
+  return db
+    .select({
+      id: applications.id,
+      jobId: applications.jobId,
+      status: applications.status,
+      company: jobs.company,
+      title: jobs.title,
+      hasListing: sql<number>`coalesce(trim(${jobs.listingText}), '') != ''`.mapWith(Boolean),
+      passedScreening: sql<number>`${applications.passedScreeningAt} is not null`.mapWith(Boolean),
+      updatedAt: applications.updatedAt,
+    })
+    .from(applications)
+    .innerJoin(jobs, and(eq(jobs.id, applications.jobId), eq(jobs.userId, userId)))
+    .where(eq(applications.userId, userId))
+    .orderBy(desc(applications.updatedAt), desc(applications.id))
+    .all();
+}
+
+export type ApplicationSummary = Awaited<ReturnType<typeof listApplicationSummaries>>[number];
+
+// One application in full, for the edit dialog, loaded when it opens.
+export async function getApplicationDetails(id: number) {
+  const { db, userId } = await scope();
+  return db
+    .select({
+      id: applications.id,
+      status: applications.status,
+      notes: applications.notes,
+      passedScreening: sql<number>`${applications.passedScreeningAt} is not null`.mapWith(Boolean),
+      company: jobs.company,
+      title: jobs.title,
+      url: jobs.url,
+      listingText: jobs.listingText,
+    })
+    .from(applications)
+    .innerJoin(jobs, and(eq(jobs.id, applications.jobId), eq(jobs.userId, userId)))
+    .where(and(eq(applications.id, id), eq(applications.userId, userId)))
+    .get();
+}
+
+export type ApplicationDetails = NonNullable<Awaited<ReturnType<typeof getApplicationDetails>>>;
 
 export async function createApplication(input: CreateApplicationInput) {
   const { db, userId } = await scope();

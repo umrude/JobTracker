@@ -4,7 +4,8 @@ import { STATUS_LABELS } from "@/lib/schemas/status";
 import { CONFIDENT_AT } from "@/lib/email/propose";
 import { cn } from "@/lib/utils";
 import type { SuggestionRow } from "@/server/db/email-event-store";
-import { AddApplicationForm, DecisionButtons, LinkForm, type LinkGroup } from "./suggestion-actions";
+import { AddApplicationForm, DecisionButtons, LinkForm } from "./suggestion-actions";
+import type { LinkOption } from "./link-choices";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
@@ -20,13 +21,13 @@ const MATCH_LABELS: Record<MatchMethod, string> = {
 // Components.
 export function SuggestionCard({
   row,
-  linkGroups,
+  likely,
   gmailAccount,
   writable,
 }: {
   row: SuggestionRow;
-  // The link picker's choices for this email, likely matches first.
-  linkGroups: LinkGroup[];
+  // This email's likely matches, listed first in the link picker.
+  likely: LinkOption[];
   // The connected Gmail address, for "Open in Gmail". Null in demo mode.
   gmailAccount: string | null;
   writable: boolean;
@@ -89,7 +90,7 @@ export function SuggestionCard({
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <LinkForm
               id={row.id}
-              groups={linkGroups}
+              likely={likely}
               current={onBoard ? `app:${row.applicationId}` : savedJob ? `job:${row.jobId}` : null}
               disabled={!writable}
             />

@@ -56,7 +56,7 @@ src/
 - Zod schemas live in `src/lib/schemas/`. Derive types with `z.infer`; do not hand-write duplicate types.
 - Validate all Server Action input with Zod. Validate all LLM output with Zod and handle malformed output gracefully (retry once, then fail with a clear error).
 - Mutations are Server Actions. Reads happen in Server Components where possible.
-- Default to Server Components. Add `"use client"` only when needed (interactivity, hooks, dnd) and keep client components small.
+- Default to Server Components. Add `"use client"` only when needed (interactivity, hooks, dnd) and keep client components small. Give a Client Component only what it renders (everything passed to one is sent to the browser); load the rest on demand, and don't repeat a big list per row. See docs/performance.md.
 - No `any`. Prefer `unknown` plus narrowing. Avoid `as` casts except at validated boundaries.
 - Pure logic (email pre-filter, matching, status transitions) lives in plain functions with no I/O, and gets unit tests.
 ### Gmail sync principles
@@ -110,6 +110,8 @@ pnpm db:migrate     # apply migrations
 pnpm db:seed        # seed demo database
 pnpm demo:pdfs      # rebuild the demo's pre-built PDFs (after db:seed; needs Tectonic). Commit the result.
 pnpm eval:classifier # run the email classifier on its eval set (real API calls, costs a few cents)
+pnpm perf:seed       # build data/perf.db (demo + 300 applications) for measuring performance
+pnpm perf:measure    # time and size each page of a running production build (docs/performance.md)
 ```
  
 Before saying a task is done, run `pnpm typecheck && pnpm lint && pnpm test` and fix any failures.

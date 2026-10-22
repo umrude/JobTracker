@@ -11,7 +11,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { STATUSES, type Status } from "@/lib/schemas/status";
-import type { ApplicationWithJob } from "@/server/db/applications";
+import type { ApplicationSummary } from "@/server/db/applications";
 import { moveApplicationAction } from "../actions";
 import { Column } from "./column";
 import { ApplicationCard } from "./application-card";
@@ -20,7 +20,7 @@ export function Board({
   initialApplications,
   disabled,
 }: {
-  initialApplications: ApplicationWithJob[];
+  initialApplications: ApplicationSummary[];
   disabled: boolean;
 }) {
   const [applications, setApplications] = useState(initialApplications);

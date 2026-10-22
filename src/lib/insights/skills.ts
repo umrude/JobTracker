@@ -15,7 +15,13 @@ import { skillKeysIn } from "@/lib/tailoring/text-checks";
 
 type Row = { key: string; name: string; status: "matched" | "missing" };
 
-export function splitSkillPhrases(rows: readonly Row[], resolver: SkillResolver): Row[] {
+// Looking a phrase up means checking it against every term the resolver
+// knows (about a thousand), and the same phrases repeat across hundreds of
+// comparisons, so a run keeps what it found per phrase. Pass one cache to
+// every call in a run (docs/performance.md).
+export type PhraseCache = Map<string, string[]>;
+
+export function splitSkillPhrases(rows: readonly Row[], resolver: SkillResolver, cache: PhraseCache = new Map()): Row[] {
   const result = new Map<string, Row>();
   const add = (row: Row) => {
     // Within one comparison, a skill that's both matched and missing (two
@@ -24,7 +30,11 @@ export function splitSkillPhrases(rows: readonly Row[], resolver: SkillResolver)
     if (!existing || (existing.status === "missing" && row.status === "matched")) result.set(row.key, row);
   };
   for (const row of rows) {
-    const keys = [...skillKeysIn(row.name, resolver)];
+    let keys = cache.get(row.name);
+    if (!keys) {
+      keys = [...skillKeysIn(row.name, resolver)];
+      cache.set(row.name, keys);
+    }
     if (keys.length === 0) {
       add(row);
       continue;

@@ -22,11 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { STATUSES, STATUS_LABELS } from "@/lib/schemas/status";
-import type { ApplicationWithJob } from "@/server/db/applications";
+import type { ApplicationDetails } from "@/server/db/applications";
 import {
   addApplicationAction,
   deleteApplicationAction,
   editApplicationAction,
+  loadApplicationAction,
 } from "../actions";
 import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 
@@ -36,13 +37,32 @@ type ApplicationFormProps =
       mode: "edit";
       disabled: boolean;
       trigger: ReactElement;
-      application: ApplicationWithJob;
+      // The card only has a summary; the full application (listing, notes)
+      // is loaded when the dialog opens. See docs/performance.md.
+      applicationId: number;
+      company: string;
     };
 
 export function ApplicationForm(props: ApplicationFormProps) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const application = props.mode === "edit" ? props.application : undefined;
+  const [details, setDetails] = useState<ApplicationDetails | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const application = props.mode === "edit" ? details : null;
+  const loading = props.mode === "edit" && !details && !loadFailed;
+
+  function handleOpenChange(value: boolean) {
+    setOpen(value);
+    if (!value || props.mode !== "edit") return;
+    // Fresh each time it opens, so it never shows stale details.
+    setDetails(null);
+    setLoadFailed(false);
+    startTransition(async () => {
+      const loaded = await loadApplicationAction(props.applicationId);
+      if (loaded) setDetails(loaded);
+      else setLoadFailed(true);
+    });
+  }
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
@@ -58,12 +78,12 @@ export function ApplicationForm(props: ApplicationFormProps) {
   function handleDelete() {
     if (props.mode !== "edit") return;
     const confirmed = window.confirm(
-      `Delete the application for ${props.application.job.company}?`,
+      `Delete the application for ${props.company}?`,
     );
     if (!confirmed) return;
 
     const formData = new FormData();
-    formData.set("id", String(props.application.id));
+    formData.set("id", String(props.applicationId));
     startTransition(async () => {
       await deleteApplicationAction(formData);
       setOpen(false);
@@ -71,7 +91,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(value) => setOpen(value)}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <MaybeDisabledTooltip
         disabled={props.disabled}
         message="Disabled in demo mode"
@@ -89,7 +109,10 @@ export function ApplicationForm(props: ApplicationFormProps) {
               : "Update details or change its status."}
           </DialogDescription>
         </DialogHeader>
-        <form action={handleSubmit} className="space-y-4">
+        {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+        {loadFailed && <p className="text-sm text-destructive">This application couldn&apos;t be loaded. Close and try again.</p>}
+        {!loading && !loadFailed && (
+        <form key={application?.id ?? "new"} action={handleSubmit} className="space-y-4">
           {application && (
             <input type="hidden" name="id" value={application.id} />
           )}
@@ -98,7 +121,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
             <Input
               id="company"
               name="company"
-              defaultValue={application?.job.company}
+              defaultValue={application?.company}
               required
             />
           </div>
@@ -107,7 +130,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
             <Input
               id="title"
               name="title"
-              defaultValue={application?.job.title}
+              defaultValue={application?.title}
               required
             />
           </div>
@@ -118,7 +141,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
               name="url"
               type="url"
               placeholder="https://..."
-              defaultValue={application?.job.url ?? ""}
+              defaultValue={application?.url ?? ""}
             />
           </div>
           <div className="space-y-2">
@@ -128,7 +151,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
               name="listingText"
               rows={4}
               placeholder="Paste the job description"
-              defaultValue={application?.job.listingText ?? ""}
+              defaultValue={application?.listingText ?? ""}
               className="max-h-48"
             />
             <p className="text-xs text-muted-foreground">
@@ -159,7 +182,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
             <input
               type="checkbox"
               name="passedScreening"
-              defaultChecked={application?.passedScreeningAt != null}
+              defaultChecked={application?.passedScreening ?? false}
               className="mt-0.5 size-4 accent-primary"
             />
             <span>
@@ -194,6 +217,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );

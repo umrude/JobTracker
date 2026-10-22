@@ -65,6 +65,7 @@ export function insightInputs(db: AppDb, userId: number): { jobs: InsightJob[]; 
     .get()?.id;
 
   const resolver = skillResolverFor(db, userId);
+  const phraseCache = new Map<string, string[]>();
   const skills = db
     .select({ name: profileSkills.name, proficiency: profileSkills.proficiency })
     .from(profileSkills)
@@ -85,7 +86,7 @@ export function insightInputs(db: AppDb, userId: number): { jobs: InsightJob[]; 
           ? {
               // Phrases split into the known skills they mention, so the same
               // skill written different ways is counted once (lib/insights/skills.ts).
-              skills: splitSkillPhrases(skillsByComparison.get(comparison.id) ?? [], resolver),
+              skills: splitSkillPhrases(skillsByComparison.get(comparison.id) ?? [], resolver, phraseCache),
               listingChanged: listingChangedSince(comparison.listingHash, job.listingText),
               olderResume: activeResumeId !== undefined && comparison.resumeId !== activeResumeId,
             }

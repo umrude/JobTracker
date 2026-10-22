@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { MessageState } from "@/lib/form-state";
 import { STATUSES, STATUS_LABELS, type Status } from "@/lib/schemas/status";
 import { addAsApplicationAction, confirmSuggestionAction, dismissSuggestionAction, linkSuggestionAction } from "../actions";
+import { useLinkChoices, type LinkOption } from "./link-choices";
 
 const idle: MessageState = { status: "idle" };
 
@@ -67,26 +68,41 @@ export function DecisionButtons({
   );
 }
 
-export type LinkOption = { value: string; label: string };
-export type LinkGroup = { label: string; options: LinkOption[] };
-
 // Picks what an unlinked (or wrongly linked) email is about: an
 // application or a saved job. Likely matches (same company) come first,
-// so two near-identical roles at one company are side by side.
+// so two near-identical roles at one company are side by side. The card
+// is given only its likely matches; every other choice comes from the
+// page's shared list (link-choices.tsx), and the picker is only drawn when
+// you open it: a page of cards each with hundreds of options was slow.
 export function LinkForm({
   id,
-  groups,
+  likely,
   current,
   disabled,
 }: {
   id: number;
-  groups: LinkGroup[];
+  likely: LinkOption[];
   // "app:12" or "job:5", if it's linked.
   current: string | null;
   disabled: boolean;
 }) {
   const [state, action, pending] = useActionState(linkSuggestionAction, idle);
+  const [open, setOpen] = useState(false);
+  const choices = useLinkChoices();
 
+  if (!open) {
+    return (
+      <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)} disabled={disabled}>
+        {current ? "Relink..." : "Link..."}
+      </Button>
+    );
+  }
+
+  const groups = [
+    { label: "Likely", options: likely },
+    { label: "Applications", options: choices.applications },
+    { label: "Saved jobs", options: choices.savedJobs },
+  ];
   return (
     <form action={action} className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2">
@@ -112,6 +128,9 @@ export function LinkForm({
         </select>
         <Button type="submit" size="sm" variant="outline" disabled={disabled || pending}>
           {pending ? "Linking..." : current ? "Relink" : "Link"}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
         </Button>
       </div>
       <Message state={state} />

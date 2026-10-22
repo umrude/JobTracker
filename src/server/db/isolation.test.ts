@@ -665,3 +665,19 @@ describe("compare all", () => {
     expect((await insightsService.getCompareAllPlan()).count).toBe(1);
   });
 });
+
+describe("application summaries and details", () => {
+  it("lists and loads only your own, without listing text in the summary", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "interviewing", listingText: "A long listing." });
+    as(BOB);
+    expect(await applicationsDal.listApplicationSummaries()).toEqual([]);
+    expect(await applicationsDal.getApplicationDetails(app.id)).toBeUndefined();
+
+    as(ALICE);
+    const [summary] = await applicationsDal.listApplicationSummaries();
+    expect(summary).toMatchObject({ id: app.id, company: "Acme", hasListing: true, passedScreening: true });
+    expect(Object.keys(summary)).not.toContain("listingText");
+    expect(await applicationsDal.getApplicationDetails(app.id)).toMatchObject({ listingText: "A long listing.", passedScreening: true });
+  });
+});

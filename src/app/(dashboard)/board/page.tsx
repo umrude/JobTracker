@@ -2,7 +2,7 @@ import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getMode, isWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
-import { listApplicationsWithJob } from "@/server/db/applications";
+import { listApplicationSummaries } from "@/server/db/applications";
 import { Board } from "./_components/board";
 import { ApplicationForm } from "./_components/application-form";
 
@@ -15,7 +15,7 @@ export default async function BoardPage() {
   // cookie-toggled local demo preview still shows the demo dataset but
   // stays writable, so developing/testing CRUD against it works normally.
   const disabled = !writable;
-  const applications = await listApplicationsWithJob();
+  const applications = await listApplicationSummaries();
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">

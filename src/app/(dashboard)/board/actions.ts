@@ -6,6 +6,8 @@ import { requireSession } from "@/server/require-session";
 import {
   createApplication,
   deleteApplication,
+  getApplicationDetails,
+  type ApplicationDetails,
   moveApplicationStatus,
   updateApplication,
 } from "@/server/db/applications";
@@ -15,6 +17,7 @@ import {
   moveApplicationSchema,
   updateApplicationSchema,
 } from "@/lib/schemas/application";
+import { idSchema } from "@/lib/schemas/form";
 
 export async function addApplicationAction(formData: FormData) {
   await requireSession();
@@ -74,4 +77,13 @@ export async function deleteApplicationAction(formData: FormData) {
 
   await deleteApplication(input.id);
   revalidatePath("/board");
+}
+
+// The edit dialog's data, loaded when it opens rather than sent with every
+// card (docs/performance.md). A read: allowed in the read-only demo.
+export async function loadApplicationAction(id: number): Promise<ApplicationDetails | null> {
+  await requireSession();
+  const parsed = idSchema.safeParse(id);
+  if (!parsed.success) return null;
+  return (await getApplicationDetails(parsed.data)) ?? null;
 }

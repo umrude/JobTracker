@@ -33,6 +33,9 @@ const envSchema = z.object({
   // the PATH of whatever started the server.
   TECTONIC_PATH: z.string().optional().default("tectonic"),
   DATABASE_PATH: z.string().optional().default("./data/app.db"),
+  // Where demo mode reads from. Only changed to measure performance against
+  // a large generated database (pnpm perf:seed; docs/performance.md).
+  DEMO_DATABASE_PATH: z.string().optional(),
   // Encrypts stored Gmail refresh tokens: 32 random bytes, base64. Optional
   // at startup like ANTHROPIC_API_KEY (demo mode never connects Gmail);
   // connecting checks for it. Validated here so a malformed key fails at

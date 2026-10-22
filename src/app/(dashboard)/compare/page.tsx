@@ -2,13 +2,13 @@ import Link from "next/link";
 import { ChevronRightIcon } from "lucide-react";
 import { requireSession } from "@/server/require-session";
 import { listSavedJobs } from "@/server/db/jobs";
-import { listApplicationsWithJob } from "@/server/db/applications";
+import { listApplicationSummaries } from "@/server/db/applications";
 import { getActiveResume } from "@/server/db/resumes";
 import { listLatestComparisons, type StoredComparison } from "@/server/comparisons";
 import { STATUS_LABELS, type Status } from "@/lib/schemas/status";
 import { scoreBand } from "@/lib/score-band";
 
-type Row = { id: number; title: string; company: string; listingText: string | null; status?: Status };
+type Row = { id: number; title: string; company: string; hasListing: boolean; status?: Status };
 
 // The job picker: every saved job and application with its latest score,
 // if any. Applications are here too, so one added straight to the board
@@ -20,12 +20,13 @@ export default async function CompareIndexPage() {
 
   const [jobs, applications, latest, activeResume] = await Promise.all([
     listSavedJobs(),
-    listApplicationsWithJob(),
+    listApplicationSummaries(),
     listLatestComparisons(),
     getActiveResume(),
   ]);
-  const saved: Row[] = jobs;
-  const applied: Row[] = applications.map((app) => ({ ...app.job, status: app.status }));
+  const saved: Row[] = jobs.map((job) => ({ ...job, hasListing: job.listingText !== null }));
+  // A comparison is per job, so applications are listed by their job's id.
+  const applied: Row[] = applications.map((app) => ({ id: app.jobId, title: app.title, company: app.company, hasListing: app.hasListing, status: app.status }));
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
@@ -83,7 +84,7 @@ function JobList({
                 </span>
               </span>
               <span className="flex items-center gap-2 text-sm">
-                <ScoreSummary stored={latest.get(job.id)} activeResumeId={activeResumeId} hasListing={job.listingText !== null} />
+                <ScoreSummary stored={latest.get(job.id)} activeResumeId={activeResumeId} hasListing={job.hasListing} />
                 <ChevronRightIcon className="size-4 text-muted-foreground" />
               </span>
             </Link>
