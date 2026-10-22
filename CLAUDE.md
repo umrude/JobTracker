@@ -9,6 +9,8 @@ A web app for tracking job applications. Portfolio project, so code quality, tes
 3. **Resume comparison**: compare a saved listing against my resume (LLM, structured output).
 4. **Cover letter generation**: from listing + resume + tone/length options.
 5. **Gmail sync**: scan my inbox for application-related emails and propose status changes. Suggestions land in a review inbox; nothing moves automatically.
+6. **Insights**: skill gaps across compared listings, where each stands in my profile, and how they line up with outcomes (docs/insights.md).
+7. **Search**: the header searches applications and saved jobs, ranked company, then role, then listing text; the board filters its cards (docs/search.md).
 ## Stack
  
 - Next.js (App Router) + TypeScript (strict)

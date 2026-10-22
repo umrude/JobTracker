@@ -6,8 +6,10 @@ import { listApplicationSummaries } from "@/server/db/applications";
 import { Board } from "./_components/board";
 import { ApplicationForm } from "./_components/application-form";
 
-export default async function BoardPage() {
+export default async function BoardPage({ searchParams }: PageProps<"/board">) {
   await requireSession();
+  const { q } = await searchParams;
+  const initialFilter = typeof q === "string" ? q.slice(0, 200) : "";
 
   const mode = await getMode();
   const writable = isWritable();
@@ -41,7 +43,7 @@ export default async function BoardPage() {
           }
         />
       </div>
-      <Board initialApplications={applications} disabled={disabled} />
+      <Board initialApplications={applications} initialFilter={initialFilter} disabled={disabled} />
     </div>
   );
 }

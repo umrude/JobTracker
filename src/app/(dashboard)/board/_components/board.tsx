@@ -13,17 +13,35 @@ import {
 import { STATUSES, type Status } from "@/lib/schemas/status";
 import type { ApplicationSummary } from "@/server/db/applications";
 import { moveApplicationAction } from "../actions";
+import { FilterIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { scoreDoc } from "@/lib/search/search";
 import { Column } from "./column";
 import { ApplicationCard } from "./application-card";
 
 export function Board({
   initialApplications,
+  initialFilter,
   disabled,
 }: {
   initialApplications: ApplicationSummary[];
+  // From ?q= (the header search's "Filter the board by ...").
+  initialFilter: string;
   disabled: boolean;
 }) {
   const [applications, setApplications] = useState(initialApplications);
+  // Filters the cards already here by company and role, with the same
+  // matching as the header search (lib/search/search.ts). Listing text
+  // isn't on the board (docs/performance.md); the header search covers it.
+  const [filter, setFilter] = useState(initialFilter);
+  // A new ?q= (searching again from the header) replaces the filter, like
+  // new applications replace the list below.
+  const [prevInitialFilter, setPrevInitialFilter] = useState(initialFilter);
+  if (initialFilter !== prevInitialFilter) {
+    setPrevInitialFilter(initialFilter);
+    setFilter(initialFilter);
+  }
+  const shown = filter.trim() === "" ? applications : applications.filter((a) => matchesCompanyOrRole(a, filter));
   const [activeId, setActiveId] = useState<number | null>(null);
   const [, startTransition] = useTransition();
 
@@ -94,12 +112,30 @@ export function Board({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-xs">
+          <FilterIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            aria-label="Filter cards by company or role"
+            placeholder="Filter by company or role"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            className="pl-8"
+          />
+        </div>
+        {filter.trim() !== "" && (
+          <p className="text-sm text-muted-foreground" role="status">
+            {shown.length} of {applications.length} applications
+          </p>
+        )}
+      </div>
       <div className="flex gap-4 overflow-x-auto pb-4">
         {STATUSES.map((status) => (
           <Column
             key={status}
             status={status}
-            applications={applications.filter((a) => a.status === status)}
+            applications={shown.filter((a) => a.status === status)}
             disabled={disabled}
           />
         ))}
@@ -111,4 +147,8 @@ export function Board({
       </DragOverlay>
     </DndContext>
   );
+}
+
+function matchesCompanyOrRole(app: ApplicationSummary, filter: string): boolean {
+  return scoreDoc({ jobId: app.jobId, applicationId: app.id, company: app.company, title: app.title, listing: null, updatedAt: app.updatedAt }, filter) !== null;
 }

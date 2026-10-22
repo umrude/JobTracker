@@ -681,3 +681,27 @@ describe("application summaries and details", () => {
     expect(await applicationsDal.getApplicationDetails(app.id)).toMatchObject({ listingText: "A long listing.", passedScreening: true });
   });
 });
+
+describe("search", () => {
+  it("finds only your own jobs, and returns snippets rather than listings", async () => {
+    const { searchJobs } = await import("@/server/search");
+    as(ALICE);
+    await jobsDal.createSavedJob({ company: "Acme Robotics", title: "Engineer", listingText: "We need Kubernetes experience." });
+    await applicationsDal.createApplication({ company: "Globex", title: "Kubernetes Engineer", status: "applied" });
+    as(BOB);
+    await jobsDal.createSavedJob({ company: "Acme Bank", title: "Analyst" });
+
+    expect((await searchJobs("acme")).map((r) => r.company)).toEqual(["Acme Bank"]);
+    expect(await searchJobs("kubernetes")).toEqual([]);
+
+    as(ALICE);
+    const results = await searchJobs("kubernetes");
+    // The role match ranks above the listing match.
+    expect(results.map((r) => [r.company, r.field, r.status])).toEqual([
+      ["Globex", "title", "applied"],
+      ["Acme Robotics", "listing", null],
+    ]);
+    expect(results[1].snippet?.match).toBe("Kubernetes");
+    expect(Object.keys(results[1])).not.toContain("listing");
+  });
+});

@@ -8,6 +8,7 @@ import { gmailNeedsReconnect } from "@/server/db/gmail-connections";
 import { countPendingSuggestions } from "@/server/db/email-events";
 import { toggleDemoModeAction } from "./mode-actions";
 import { NavLinks } from "./nav-links";
+import { SearchBox } from "@/components/search-box";
 
 // Not an auth gate on its own: per Next.js's auth guidance, a layout's
 // check doesn't re-run on client-side navigation between sibling routes.
@@ -31,11 +32,12 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3">
         <div className="flex items-center gap-6">
           <span className="font-semibold">Job Tracker</span>
           <NavLinks inboxCount={inboxCount} />
         </div>
+        <SearchBox />
         <div className="flex items-center gap-4">
           {!env.DEMO_MODE && (
             <form action={toggleDemoModeAction}>
