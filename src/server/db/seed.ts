@@ -31,6 +31,8 @@ import { skillKey } from "@/lib/comparison-helpers";
 import type { Experience, Proficiency } from "@/lib/schemas/profile";
 import { defaultSyncStart } from "@/lib/email/sync-window";
 import { statusImpliesScreening } from "@/lib/screening";
+import { comparisonSchema } from "@/lib/schemas/comparison";
+import { historyListing, SEED_HISTORY } from "@/server/db/seed-history";
 import { earliestAppliedAt } from "@/server/db/gmail-store";
 import { demoMailSource } from "@/server/gmail/demo-source";
 import { syncInbox } from "@/server/gmail/sync";
@@ -592,6 +594,55 @@ function seedTailoring(
   insertTailoringDraft(db, userId, { jobId, resumeId: resume.id, ...checked, model: DEMO_MODEL });
 }
 
+// The Insights page's history (seed-history.ts): each application, and for
+// those with a listing, a comparison through the same function as the app,
+// so its skill rows are written exactly as a real comparison's would be.
+function seedHistory(db: ProfileDb, userId: number, resumeId: number) {
+  for (const app of SEED_HISTORY) {
+    const listingText = historyListing(app);
+    const job = db
+      .insert(schema.jobs)
+      .values({
+        userId,
+        company: app.company,
+        title: app.title,
+        listingText,
+        source: listingText ? "Company site" : "Email",
+        savedAt: daysAgo(app.appliedDaysAgo + 2),
+      })
+      .returning({ id: schema.jobs.id })
+      .get();
+    const updatedDaysAgo = app.updatedDaysAgo ?? Math.max(app.appliedDaysAgo - 20, 35);
+    db.insert(schema.applications)
+      .values({
+        userId,
+        jobId: job.id,
+        status: app.status,
+        appliedAt: daysAgo(app.appliedDaysAgo),
+        updatedAt: daysAgo(updatedDaysAgo),
+        passedScreeningAt:
+          app.passedScreening || statusImpliesScreening(app.status) ? daysAgo(Math.max(app.appliedDaysAgo - 7, updatedDaysAgo)) : null,
+      })
+      .run();
+
+    if (!app.skills) continue;
+    const { matched, missing } = app.skills;
+    insertComparisonWithSkills(db, userId, {
+      jobId: job.id,
+      resumeId,
+      result: comparisonSchema.parse({
+        score: Math.round((100 * matched.length) / (matched.length + missing.length)),
+        matchedSkills: matched,
+        missingSkills: missing,
+        missingKeywords: [],
+        suggestions: ["Demo history: a sample comparison for the Insights page."],
+      }),
+      model: DEMO_MODEL,
+      createdAt: daysAgo(app.appliedDaysAgo + 1),
+    });
+  }
+}
+
 // Reusable by both the CLI entry point below and instrumentation.ts (which
 // reseeds on every dev-server restart so the local "writable demo preview"
 // cookie toggle always starts from a clean, known state). Async because
@@ -708,6 +759,9 @@ export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<n
       })
       .run();
   }
+
+  // Older applications with comparisons, for the Insights page.
+  if (activeResume) seedHistory(db, demoUser.id, activeResume.id);
 
   // Gmail suggestions, made by the real sync over the demo inbox with the
   // canned classifications: the read-only public demo can't sync, so it

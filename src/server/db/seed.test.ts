@@ -53,3 +53,22 @@ describe("demo seed: Gmail suggestions", () => {
     expect(recentlyDecidedRows(db, userId).map((row) => row.emailType)).toEqual(["not_relevant"]);
   });
 });
+
+describe("demo seed: insights history", () => {
+  it("gives the Insights page enough to show every part of it", async () => {
+    const { insightInputs } = await import("@/server/db/insights-store");
+    const { buildInsights } = await import("@/lib/insights/build");
+    const { jobs, profileSkills } = insightInputs(db, userId);
+    const insights = buildInsights(jobs, profileSkills, "applied");
+
+    expect(insights.coverage.included).toBeGreaterThanOrEqual(20);
+    expect(insights.coverage.noListing.length).toBeGreaterThan(0);
+    expect(insights.screeningSplit).toBe(true);
+    const byName = new Map(insights.skills.map((s) => [s.name, s]));
+    // A comparable skill, one that's too few to compare, and each profile standing.
+    expect(insights.skills.some((s) => s.missing > 0 && s.outcomes.comparable)).toBe(true);
+    expect(byName.get("Kubernetes")?.outcomes.comparable).toBe(false);
+    expect(byName.get("Python")?.standing).toBe("in_profile");
+    expect(byName.get("Docker")?.standing).toBe("learning");
+  });
+});

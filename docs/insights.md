@@ -7,7 +7,7 @@ Phase 5. A recap of which skills your applications keep asking for that your res
 | 5a | Listings for every application, "passed screening", listing fingerprints | Done |
 | 5b | The insight numbers (pure, tested) | Done |
 | 5c | The Insights page, and comparing several jobs at once | Done |
-| 5d | Demo seed, docs, end-to-end check | Planned |
+| 5d | Demo seed, docs, end-to-end check | Done |
 
 ## Decisions
 
@@ -158,3 +158,35 @@ The read-only public demo disables the button. The local demo preview compares w
 - the other user's job never touched.
 
 `llm-pricing.test.ts` covers prices and the estimate.
+
+## Step 5d: the demo, and checking it end to end
+
+### The demo's history
+
+`server/db/seed-history.ts` adds 24 older, fictional applications from the past five months. 21 of them have a listing and a comparison, written for the demo rather than produced by a model. The comparisons go through the same `insertComparisonWithSkills` as real ones, so their skill rows are written exactly as a real comparison's would be.
+
+They're shaped so every part of the page has something to show (applications only):
+
+| Skill | What it shows |
+|---|---|
+| AWS | Missing in 7 of 7 rejections and 5 of 5 that progressed: comparable, and no difference between them |
+| Kubernetes | Asked for by 9 rejections (3 ghosted) but only 1 that progressed: shown, labeled "too few to compare" |
+| PostgreSQL | The resume has "some SQL", so it's matched in some comparisons and missing in others: 5 of 8 rejections, 1 of 6 that progressed. Comparable |
+| Python | In the profile but not on the resume: in the "In your profile" card |
+| Docker | Marked Learning |
+
+Five rejections are known to have passed screening, so the screening split shows (and none of their listings asked for Kubernetes). Three applications have no listing, so they appear in the "left out" list. The demo's ten earlier applications have listings but no comparisons, so **Compare all (11)** has something to do in the local preview.
+
+The history mustn't disturb the rest of the demo:
+
+- No company name appears in the demo inbox, so sync links none of these.
+- Nothing is left waiting without recent activity: Interviewing ones changed recently. So the ghosted rule still fires only for Larkspur Systems.
+- `seed.test.ts` checks both, along with a comparable skill, one that's too few to compare, each profile standing, and the screening split.
+
+### Reading "missing every time"
+
+A skill your resume doesn't show at all is missing in every comparison that asks for it ("9 of 9"). For those, the useful comparison is how many in each group asked for it: 9 rejections versus 1 that progressed. The table's description says so. The "missing in x of n" ratio is most telling for skills your resume shows only sometimes, like PostgreSQL here.
+
+### Checked end to end
+
+`pnpm build`, then `DEMO_MODE=true pnpm start` against the reseeded demo. Insights rendered in both scopes, with 21 listings analyzed, the screening columns, and the counts above. Every other page still rendered, each in under about 100 ms on the server.

@@ -202,7 +202,9 @@ function SkillTable({ skills, insights, total }: { skills: SkillInsight[]; insig
         <CardTitle>Most often missing</CardTitle>
         <CardDescription>
           {total > skills.length ? `The top ${skills.length} of ${total} skills` : `${total} skills`} your resume didn&apos;t show,
-          out of the listings that asked for each. Outcome columns count applications whose listing asked for it.
+          out of the listings that asked for each. Outcome columns count applications whose listing asked for it. A
+          skill your resume doesn&apos;t show at all is missing every time it&apos;s asked, so for those, compare how many
+          in each group asked for it.
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
