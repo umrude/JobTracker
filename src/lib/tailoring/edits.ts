@@ -1,4 +1,4 @@
-import { entryHeadingText } from "@/lib/profile/items";
+import { entryHeadings } from "@/lib/profile/items";
 import type { Profile } from "@/lib/profile/types";
 import type { CheckIssue, Decisions, ReviewEdit, TailoringProposal } from "@/lib/schemas/tailoring";
 import type { SkillResolver } from "@/lib/skills/resolver";
@@ -160,11 +160,7 @@ export function buildOutline(
   profile: Profile,
 ): Outline {
   const edited = new Set(edits.map(editItemId));
-  const entryById = new Map(profile.entries.map((e) => [`entry:${e.id}`, e]));
-  const heading = (id: string) => {
-    const entry = entryById.get(id);
-    return entry ? entryHeadingText(entry) : id;
-  };
+  const heading = entryHeadings(profile);
   const toOutline = (section: Section): OutlineSection => ({
     title: section.section,
     isNew: section.isNew,

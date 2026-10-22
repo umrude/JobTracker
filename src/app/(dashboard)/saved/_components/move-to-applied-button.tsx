@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 import type { FormState } from "@/lib/form-state";
 import { moveToAppliedAction } from "../actions";
+import { ActionMessage } from "@/components/action-message";
 
 const initialState: FormState = { status: "idle" };
 
@@ -33,11 +34,7 @@ export function MoveToAppliedButton({
           {pending ? "Moving..." : "Move to Applied"}
         </Button>
       </MaybeDisabledTooltip>
-      {state.status === "error" && (
-        <p role="alert" className="text-sm text-destructive">
-          {state.message}
-        </p>
-      )}
+      <ActionMessage state={state} />
     </form>
   );
 }

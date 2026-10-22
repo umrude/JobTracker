@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { FormState } from "@/lib/form-state";
 import { COVER_LETTER_MAX } from "@/lib/schemas/cover-letter";
 import { saveCoverLetterAction } from "../actions";
+import { ActionMessage } from "@/components/action-message";
 
 const initialState: FormState = { status: "idle" };
 
@@ -66,11 +67,7 @@ export function LetterEditor({
           </Button>
         )}
         {changed && !pending && <span className="text-xs text-muted-foreground">Unsaved changes</span>}
-        {state.status === "error" && (
-          <p role="alert" className="text-sm text-destructive">
-            {state.message}
-          </p>
-        )}
+        <ActionMessage state={state} />
       </div>
     </form>
   );

@@ -23,6 +23,7 @@ import {
   deleteSavedJobAction,
   updateSavedJobAction,
 } from "../actions";
+import { ActionMessage } from "@/components/action-message";
 
 type SavedJobFormProps =
   | { mode: "add"; disabled: boolean; trigger: ReactElement }
@@ -128,11 +129,7 @@ function SavedJobFormBody({
       <Field label="Notes" name="notes" errors={fieldErrors.notes}>
         <Textarea id="notes" name="notes" defaultValue={job?.notes ?? ""} />
       </Field>
-      {state.status === "error" && (
-        <p role="alert" className="text-sm text-destructive">
-          {state.message}
-        </p>
-      )}
+      <ActionMessage state={state} />
       <DialogFooter className="gap-2 sm:justify-between">
         {job && (
           <Button

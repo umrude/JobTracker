@@ -21,14 +21,18 @@ export type Approval = {
   tex: string;
 };
 
-export function buildApproval(input: {
-  proposed: TailoringProposal;
-  accepted: readonly string[];
+// What approving and trimming both work from: your profile, and the resume
+// version's parsed and raw LaTeX.
+export type ApprovalContext = {
   profile: Profile;
   tex: ParsedResumeLatex;
   latexSource: string;
   resolver: SkillResolver;
-}): LatexResult<{ approval: Approval }> {
+};
+
+export function buildApproval(
+  input: ApprovalContext & { proposed: TailoringProposal; accepted: readonly string[] },
+): LatexResult<{ approval: Approval }> {
   const current = currentAsProposal(input.profile, input.tex, input.resolver);
   if (!current.ok) return current;
 
@@ -45,18 +49,12 @@ export function buildApproval(input: {
 }
 
 // Removes bullets (and whole entries) to fit one page, from an already-
-// approved resume. Works
-// on the full resume (approved sections plus the untouched ones), so any
-// bullet can be removed, but never an entry's last one.
-export function trimApproval(input: {
-  final: TailoringProposal;
-  removeBulletIds: readonly string[];
-  removeEntryIds?: readonly string[];
-  profile: Profile;
-  tex: ParsedResumeLatex;
-  latexSource: string;
-  resolver: SkillResolver;
-}): LatexResult<{ approval: Approval }> {
+// approved resume. Works on the full resume (approved sections plus the
+// untouched ones), so any bullet can be removed, but never an entry's last
+// one, nor a section's last entry.
+export function trimApproval(
+  input: ApprovalContext & { final: TailoringProposal; removeBulletIds: readonly string[]; removeEntryIds?: readonly string[] },
+): LatexResult<{ approval: Approval }> {
   const current = currentAsProposal(input.profile, input.tex, input.resolver);
   if (!current.ok) return current;
 

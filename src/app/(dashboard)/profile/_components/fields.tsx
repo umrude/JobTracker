@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EXPERIENCE_KINDS, PROFICIENCY_LEVELS } from "@/lib/schemas/profile";
 import type { ProfileEntry, ProfileSkill } from "@/lib/profile/types";
 import { EXPERIENCE_LABELS, PROFICIENCY_LABELS } from "@/lib/profile/labels";
+import { NativeSelect } from "@/components/ui/native-select";
 
 // Form fields for the profile dialogs. Plain inputs with no client code:
 // the page (a Server Component) renders them and passes them into
@@ -20,11 +21,6 @@ function Field({ id, label, hint, children }: { id: string; label: string; hint?
   );
 }
 
-// A native <select>: it submits with the form like any input, so no client
-// state is needed. Styled to match <Input>.
-const selectClass =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
-
 export function SkillFields({ skill }: { skill?: ProfileSkill }) {
   const prefix = skill ? `skill-${skill.id}` : "skill-new";
   return (
@@ -38,24 +34,24 @@ export function SkillFields({ skill }: { skill?: ProfileSkill }) {
           <Input id={`${prefix}-category`} name="category" defaultValue={skill?.category ?? ""} maxLength={60} />
         </Field>
         <Field id={`${prefix}-proficiency`} label="Proficiency">
-          <select id={`${prefix}-proficiency`} name="proficiency" defaultValue={skill?.proficiency ?? ""} className={selectClass}>
+          <NativeSelect id={`${prefix}-proficiency`} name="proficiency" defaultValue={skill?.proficiency ?? ""} className="w-full">
             <option value="">Not set</option>
             {PROFICIENCY_LEVELS.map((level) => (
               <option key={level} value={level}>
                 {PROFICIENCY_LABELS[level]}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </Field>
         <Field id={`${prefix}-experience`} label="Experience">
-          <select id={`${prefix}-experience`} name="experience" defaultValue={skill?.experience ?? ""} className={selectClass}>
+          <NativeSelect id={`${prefix}-experience`} name="experience" defaultValue={skill?.experience ?? ""} className="w-full">
             <option value="">Not set</option>
             {EXPERIENCE_KINDS.map((kind) => (
               <option key={kind} value={kind}>
                 {EXPERIENCE_LABELS[kind]}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </Field>
       </div>
       <Field

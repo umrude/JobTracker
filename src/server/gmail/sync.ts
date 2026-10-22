@@ -23,6 +23,7 @@ import {
   type SyncSavedJob,
 } from "@/server/db/email-event-store";
 import type { MailSource } from "@/server/gmail/mail-source";
+import { plural } from "@/lib/format";
 
 type AppDb = BetterSQLite3Database<typeof schema>;
 
@@ -85,6 +86,24 @@ export type SyncSummary = {
 };
 
 const CLASSIFY_CONCURRENCY = 4;
+
+function* batches<T>(items: readonly T[], size: number): Generator<T[]> {
+  for (let i = 0; i < items.length; i += size) yield items.slice(i, i + size);
+}
+
+// Classifies a batch at once. An account-level failure (out of credits, no
+// key) stops the whole run before anything in the batch is stored, so a
+// later run picks up from here (see ClassifierUnavailable).
+async function classifyBatch(
+  batch: readonly { email: EmailMeta; match: Match<Target> }[],
+  classify: Classifier,
+): Promise<ClassifyOutcome[]> {
+  const outcomes = await Promise.all(batch.map(({ email, match }) => classify(email, match.target)));
+  for (const outcome of outcomes) {
+    if (!outcome.ok && outcome.stopSync) throw new ClassifierUnavailable(outcome.stopSync.reason, outcome.message);
+  }
+  return outcomes;
+}
 const DAY = 24 * 60 * 60 * 1000;
 
 export async function syncInbox(deps: {
@@ -134,12 +153,8 @@ export async function syncInbox(deps: {
     truncated: batch.truncated,
     relisted,
   };
-  for (let i = 0; i < planned.length; i += CLASSIFY_CONCURRENCY) {
-    const chunk = planned.slice(i, i + CLASSIFY_CONCURRENCY);
-    const outcomes = await Promise.all(chunk.map(({ email, match }) => classify(email, match.target)));
-    for (const outcome of outcomes) {
-      if (!outcome.ok && outcome.stopSync) throw new ClassifierUnavailable(outcome.stopSync.reason, outcome.message);
-    }
+  for (const chunk of batches(planned, CLASSIFY_CONCURRENCY)) {
+    const outcomes = await classifyBatch(chunk, classify);
     chunk.forEach(({ email, match: headerMatch }, index) => {
       const outcome = outcomes[index];
       const fields = classifiedFields(outcome, headerMatch, targets, now);
@@ -279,12 +294,8 @@ export async function reclassifyStored(deps: {
     return { row, email, match: matchEmail(email, targets, threadTargets.get(email.threadId)), keepMethod: null };
   });
 
-  for (let i = 0; i < planned.length; i += CLASSIFY_CONCURRENCY) {
-    const chunk = planned.slice(i, i + CLASSIFY_CONCURRENCY);
-    const outcomes = await Promise.all(chunk.map(({ email, match }) => classify(email, match.target)));
-    for (const outcome of outcomes) {
-      if (!outcome.ok && outcome.stopSync) throw new ClassifierUnavailable(outcome.stopSync.reason, outcome.message);
-    }
+  for (const chunk of batches(planned, CLASSIFY_CONCURRENCY)) {
+    const outcomes = await classifyBatch(chunk, classify);
     chunk.forEach(({ row, email, match, keepMethod }, index) => {
       const outcome = outcomes[index];
       const fields = classifiedFields(outcome, match, targets, now);
@@ -299,7 +310,6 @@ export async function reclassifyStored(deps: {
   return summary;
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 // One sentence for the "Classify again" button.
 export function describeReclassify(summary: ReclassifySummary): string {

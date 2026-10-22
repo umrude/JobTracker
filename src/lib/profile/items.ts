@@ -66,3 +66,13 @@ export function entryHeadingText(entry: {
   const name = [entry.title, entry.subtitle].filter((part) => part !== "").join(", ");
   return entry.dates ? `${name} (${entry.dates})` : name;
 }
+
+// Entry id ("entry:7") -> its heading, for review screens. Falls back to
+// the id for an entry that's no longer in the profile.
+export function entryHeadings(profile: { entries: readonly ({ id: number } & Parameters<typeof entryHeadingText>[0])[] }): (entryId: string) => string {
+  const byId = new Map(profile.entries.map((entry) => [`entry:${entry.id}`, entry]));
+  return (entryId) => {
+    const entry = byId.get(entryId);
+    return entry ? entryHeadingText(entry) : entryId;
+  };
+}

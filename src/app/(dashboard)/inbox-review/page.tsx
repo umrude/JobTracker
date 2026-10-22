@@ -22,9 +22,8 @@ import { SyncStartForm } from "./_components/sync-start-form";
 import { SyncButton } from "./_components/sync-button";
 import { SuggestionCard } from "./_components/suggestion-card";
 import { LinkChoicesProvider, type LinkOption } from "./_components/link-choices";
+import { formatDateTime, formatUtcDate } from "@/lib/format";
 
-const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
-const dateTimeFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 
 // "YYYY-MM-DD" in UTC, as <input type="date"> wants. Sync dates are whole
 // UTC days (see sync-window.ts).
@@ -253,8 +252,8 @@ function GmailCard({ status, writable }: { status: GmailStatus; writable: boolea
           <MailIcon className="size-4" /> Gmail: {status.email}
         </CardTitle>
         <CardDescription>
-          Connected {dateTimeFormat.format(status.connectedAt)} ·{" "}
-          {status.lastSyncedAt ? `last synced ${dateTimeFormat.format(status.lastSyncedAt)}` : "not synced yet"}
+          Connected {formatDateTime(status.connectedAt)} ·{" "}
+          {status.lastSyncedAt ? `last synced ${formatDateTime(status.lastSyncedAt)}` : "not synced yet"}
         </CardDescription>
         <CardAction>
           <form action={disconnectGmailAction}>
@@ -279,7 +278,7 @@ function GmailCard({ status, writable }: { status: GmailStatus; writable: boolea
         )}
         {status.synced ? (
           <p className="text-sm text-muted-foreground">
-            Synced from {dateFormat.format(status.syncStartAt)}. Each sync now fetches only new email.
+            Synced from {formatUtcDate(status.syncStartAt)}. Each sync now fetches only new email.
           </p>
         ) : (
           <SyncStartForm

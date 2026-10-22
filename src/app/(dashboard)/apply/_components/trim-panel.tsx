@@ -3,9 +3,9 @@
 import { useActionState, useState } from "react";
 import { ScissorsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { MessageState } from "@/lib/form-state";
 import { trimTailoringAction } from "../actions";
+import { ActionMessage } from "@/components/action-message";
 
 const initialState: MessageState = { status: "idle" };
 
@@ -85,11 +85,7 @@ export function TrimPanel({
           <ScissorsIcon />
           {pending ? "Rebuilding..." : `Remove ${count || ""} and rebuild`}
         </Button>
-        {state.status !== "idle" && (
-          <p role={state.status === "error" ? "alert" : "status"} className={cn("text-sm", state.status === "error" && "text-destructive")}>
-            {state.message}
-          </p>
-        )}
+        <ActionMessage state={state} showSuccess />
       </div>
     </form>
   );

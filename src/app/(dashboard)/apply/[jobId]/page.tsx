@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, FileTextIcon, ShieldCheckIcon } from "lucide-react";
@@ -22,8 +21,9 @@ import { LetterEditor } from "../_components/letter-editor";
 import { GenerateButton } from "../_components/generate-button";
 import { ReviewPanel } from "../_components/review-panel";
 import { TrimPanel } from "../_components/trim-panel";
+import { formatDateTime } from "@/lib/format";
+import { Notice } from "@/components/notice";
 
-const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 
 // Prepare application: a tailored resume and a cover letter for one job. A
 // Server Component: it reads the latest tailoring, its changes, and the
@@ -190,10 +190,6 @@ function CoverLetterCard({
   );
 }
 
-function Notice({ children }: { children: ReactNode }) {
-  return <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">{children}</p>;
-}
-
 function TailoredResumeCard({
   review,
   jobId,
@@ -239,7 +235,7 @@ function TailoredResumeCard({
         {latest?.status === "ok" && (
           <>
             <p className="text-xs text-muted-foreground">
-              Version {latest.version} · {dateFormat.format(latest.createdAt)} ·{" "}
+              Version {latest.version} · {formatDateTime(latest.createdAt)} ·{" "}
               {latest.model === "demo" ? "demo proposal" : latest.model}
               {latest.state === "approved" && " · Approved"}
               {latest.revisedFromId !== null && " · Revised with your notes"}

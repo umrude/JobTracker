@@ -9,20 +9,12 @@ import type { MessageState } from "@/lib/form-state";
 import { STATUSES, STATUS_LABELS, type Status } from "@/lib/schemas/status";
 import { addAsApplicationAction, confirmSuggestionAction, dismissSuggestionAction, linkSuggestionAction } from "../actions";
 import { useLinkChoices, type LinkOption } from "./link-choices";
+import { ActionMessage } from "@/components/action-message";
+import { NativeSelect } from "@/components/ui/native-select";
 
 const idle: MessageState = { status: "idle" };
 
-const selectClass =
-  "h-8 min-w-0 max-w-64 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
-function Message({ state }: { state: MessageState }) {
-  if (state.status !== "error") return null;
-  return (
-    <p role="alert" className="text-sm text-destructive">
-      {state.message}
-    </p>
-  );
-}
 
 // Confirm and dismiss for one suggestion. A Client Component for the
 // pending states and the error message ("the application has moved on").
@@ -62,8 +54,8 @@ export function DecisionButtons({
           </Button>
         </form>
       </div>
-      <Message state={confirmState} />
-      <Message state={dismissState} />
+      <ActionMessage state={confirmState} />
+      <ActionMessage state={dismissState} />
     </div>
   );
 }
@@ -110,7 +102,7 @@ export function LinkForm({
         <label className="sr-only" htmlFor={`link-${id}`}>
           Application or saved job
         </label>
-        <select id={`link-${id}`} name="target" defaultValue={current ?? ""} className={selectClass} disabled={disabled}>
+        <NativeSelect id={`link-${id}`} name="target" defaultValue={current ?? ""} className="min-w-0 max-w-64" disabled={disabled}>
           <option value="" disabled>
             Pick an application...
           </option>
@@ -125,7 +117,7 @@ export function LinkForm({
                 ))}
               </optgroup>
             ))}
-        </select>
+        </NativeSelect>
         <Button type="submit" size="sm" variant="outline" disabled={disabled || pending}>
           {pending ? "Linking..." : current ? "Relink" : "Link"}
         </Button>
@@ -133,7 +125,7 @@ export function LinkForm({
           Cancel
         </Button>
       </div>
-      <Message state={state} />
+      <ActionMessage state={state} />
     </form>
   );
 }
@@ -173,13 +165,13 @@ export function AddApplicationForm({
       </div>
       <div className="space-y-1">
         <Label htmlFor={`add-status-${id}`}>Status</Label>
-        <select id={`add-status-${id}`} name="status" defaultValue={status} className={selectClass} disabled={disabled}>
+        <NativeSelect id={`add-status-${id}`} name="status" defaultValue={status} className="min-w-0 max-w-64" disabled={disabled}>
           {STATUSES.map((value) => (
             <option key={value} value={value}>
               {STATUS_LABELS[value]}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
       <div className="space-y-1">
         <Label htmlFor={`add-date-${id}`}>Applied on</Label>
@@ -200,7 +192,7 @@ export function AddApplicationForm({
         <Button type="submit" size="sm" disabled={disabled || pending}>
           {pending ? "Adding..." : "Add to board"}
         </Button>
-        <Message state={state} />
+        <ActionMessage state={state} />
       </div>
     </form>
   );

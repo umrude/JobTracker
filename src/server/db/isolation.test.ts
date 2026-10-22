@@ -95,9 +95,9 @@ describe("saved jobs", () => {
     as(ALICE);
     const job = await jobsDal.createSavedJob({ company: "Acme", title: "Engineer" });
     expect((await jobsDal.moveSavedJobToApplied(job.id, new Date())).ok).toBe(true);
-    expect(await applicationsDal.listApplicationsWithJob()).toHaveLength(1);
+    expect(await applicationsDal.listApplicationSummaries()).toHaveLength(1);
     as(BOB);
-    expect(await applicationsDal.listApplicationsWithJob()).toEqual([]);
+    expect(await applicationsDal.listApplicationSummaries()).toEqual([]);
   });
 });
 
@@ -112,7 +112,7 @@ describe("applications (board)", () => {
     as(BOB);
     await applicationsDal.createApplication({ company: "Globex", title: "Dev", status: "applied" });
 
-    expect((await applicationsDal.listApplicationsWithJob()).map((a) => a.job.company)).toEqual([
+    expect((await applicationsDal.listApplicationSummaries()).map((a) => a.company)).toEqual([
       "Globex",
     ]);
     await expect(
@@ -124,9 +124,9 @@ describe("applications (board)", () => {
     await applicationsDal.deleteApplication(alices.id);
 
     as(ALICE);
-    const [mine] = await applicationsDal.listApplicationsWithJob();
-    expect(mine).toMatchObject({ id: alices.id, status: "applied", notes: null });
-    expect(mine.job.company).toBe("Acme");
+    const [mine] = await applicationsDal.listApplicationSummaries();
+    expect(mine).toMatchObject({ id: alices.id, status: "applied", company: "Acme" });
+    expect(await applicationsDal.getApplicationDetails(alices.id)).toMatchObject({ notes: null });
   });
 });
 
@@ -521,7 +521,7 @@ describe("email suggestions", () => {
     // Her suggestion and her unclassified email; none of Bob's.
     expect(await emailEventsDal.countPendingSuggestions()).toBe(2);
     expect(await emailEventsDal.confirm(alices.id)).toEqual({ ok: true, status: "interviewing" });
-    const [app] = await applicationsDal.listApplicationsWithJob();
+    const [app] = await applicationsDal.listApplicationSummaries();
     expect(app.status).toBe("interviewing");
   });
 });
@@ -531,9 +531,9 @@ describe("listings and screening on applications", () => {
     as(ALICE);
     const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied", listingText: "Build things." });
     await applicationsDal.updateApplication({ id: app.id, passedScreening: true });
-    let [mine] = await applicationsDal.listApplicationsWithJob();
-    expect(mine.job.listingText).toBe("Build things.");
-    expect(mine.passedScreeningAt).not.toBeNull();
+    let mine = await applicationsDal.getApplicationDetails(app.id);
+    expect(mine?.listingText).toBe("Build things.");
+    expect(mine?.passedScreening).toBe(true);
 
     as(BOB);
     await expect(applicationsDal.updateApplication({ id: app.id, listingText: "Hacked", passedScreening: false })).rejects.toThrow(/not found/);
@@ -541,14 +541,14 @@ describe("listings and screening on applications", () => {
     as(ALICE);
     // A blank listing clears it; unticking clears screening.
     await applicationsDal.updateApplication({ id: app.id, listingText: "  ", passedScreening: false });
-    [mine] = await applicationsDal.listApplicationsWithJob();
-    expect(mine.job.listingText).toBeNull();
-    expect(mine.passedScreeningAt).toBeNull();
+    mine = await applicationsDal.getApplicationDetails(app.id);
+    expect(mine?.listingText).toBeNull();
+    expect(mine?.passedScreening).toBe(false);
     // Reaching Interviewing sets it, and unticking can't undo that.
     await applicationsDal.moveApplicationStatus(app.id, "interviewing");
     await applicationsDal.updateApplication({ id: app.id, passedScreening: false });
-    [mine] = await applicationsDal.listApplicationsWithJob();
-    expect(mine.passedScreeningAt).not.toBeNull();
+    mine = await applicationsDal.getApplicationDetails(app.id);
+    expect(mine?.passedScreening).toBe(true);
   });
 });
 

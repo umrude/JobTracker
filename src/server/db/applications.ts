@@ -18,24 +18,6 @@ async function scope() {
   return { db: getDb(await getMode()), userId: await requireUserId() };
 }
 
-export async function listApplicationsWithJob() {
-  const { db, userId } = await scope();
-  // Relational queries return a thenable query builder, not resolved rows;
-  // .sync() is the terminal call for the fully-synchronous better-sqlite3
-  // driver (the async form is `await` instead).
-  return db.query.applications
-    .findMany({
-      where: eq(applications.userId, userId),
-      with: { job: true },
-      orderBy: [desc(applications.updatedAt)],
-    })
-    .sync();
-}
-
-export type ApplicationWithJob = Awaited<
-  ReturnType<typeof listApplicationsWithJob>
->[number];
-
 // What a list of applications needs (the board's cards, pickers, the
 // Compare page): no listing text or notes. The board is a Client
 // Component, so everything it's given is sent to the browser; with real

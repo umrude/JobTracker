@@ -1,6 +1,7 @@
 import "server-only";
+import { generateStructured, parseStructured } from "@/server/llm/structured";
 import type { LlmClient, StructuredRequest } from "@/server/llm/client";
-import { llmError, type LlmResult } from "@/lib/llm-result";
+import type { LlmResult } from "@/lib/llm-result";
 import {
   tailoringProposalSchema,
   type CheckIssue,
@@ -113,34 +114,7 @@ export function buildTailorRequest(
 
 export type TailorResult = LlmResult<{ proposal: TailoringProposal; issues: CheckIssue[]; model: string }>;
 
-type Attempt =
-  | { ok: true; proposal: TailoringProposal; model: string }
-  | { ok: false; malformed: boolean; error: ReturnType<typeof llmError> };
-
-async function attempt(client: LlmClient, request: StructuredRequest): Promise<Attempt> {
-  const response = await client.generateStructured(request);
-  if (!response.ok) return { ok: false, malformed: false, error: response };
-
-  const { stopReason, text, model } = response.data;
-  if (stopReason === "refusal") return { ok: false, malformed: false, error: llmError("refusal") };
-  if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
-    return { ok: false, malformed: false, error: llmError("truncated") };
-  }
-
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    console.warn("Tailoring output wasn't valid JSON");
-    return { ok: false, malformed: true, error: llmError("malformed_output") };
-  }
-  const parsed = tailoringProposalSchema.safeParse(json);
-  if (!parsed.success) {
-    console.warn("Tailoring output didn't match the schema", parsed.error.issues.slice(0, 5));
-    return { ok: false, malformed: true, error: llmError("malformed_output") };
-  }
-  return { ok: true, proposal: parsed.data, model };
-}
+const parseProposal = (text: string) => parseStructured(text, tailoringProposalSchema);
 
 export async function tailorResume(
   input: { listing: string; context: CheckContext; comparison: ComparisonSummary | null; revision?: RevisionInput },
@@ -150,27 +124,24 @@ export async function tailorResume(
   const revision = input.revision ?? null;
   const request = buildTailorRequest(input.listing, contextText, null, revision);
 
-  let first = await attempt(client, request);
-  let callsLeft = 1;
-  if (!first.ok && first.malformed) {
-    first = await attempt(client, request);
-    callsLeft = 0;
-  }
-  if (!first.ok) return first.error;
+  const first = await generateStructured(client, request, parseProposal, "Tailoring");
+  if (!first.ok) return first;
+  const { data: proposal, model, calls } = first.data;
 
-  const checked = checkProposal(first.proposal, input.context);
-  if (checked.issues.length === 0 || callsLeft === 0) {
-    return { ok: true, data: { ...checked, model: first.model } };
-  }
+  const checked = checkProposal(proposal, input.context);
+  if (checked.issues.length === 0 || calls >= 2) return { ok: true, data: { ...checked, model } };
 
-  // One retry with the checker's findings. If it fails in any way, keep
-  // the first proposal with its flags.
-  const second = await attempt(
+  // One retry with the checker's findings, as the last call allowed. If it
+  // fails in any way, keep the first proposal with its flags.
+  const second = await generateStructured(
     client,
-    buildTailorRequest(input.listing, contextText, { previous: first.proposal, issues: checked.issues }, revision),
+    buildTailorRequest(input.listing, contextText, { previous: proposal, issues: checked.issues }, revision),
+    parseProposal,
+    "Tailoring",
+    1,
   );
-  if (!second.ok) return { ok: true, data: { ...checked, model: first.model } };
+  if (!second.ok) return { ok: true, data: { ...checked, model } };
 
-  const rechecked = checkProposal(second.proposal, input.context);
-  return { ok: true, data: { ...rechecked, model: second.model } };
+  const rechecked = checkProposal(second.data.data, input.context);
+  return { ok: true, data: { ...rechecked, model: second.data.model } };
 }

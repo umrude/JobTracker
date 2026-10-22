@@ -7,6 +7,7 @@ import { getCompareAllPlan, getInsights } from "@/server/insights";
 import { MIN_SAMPLE, SCREENING_MIN, type Insights, type JobRef, type ProfileStanding, type SkillInsight, type Tally } from "@/lib/insights/build";
 import { cn } from "@/lib/utils";
 import { CompareAllButton } from "./_components/compare-all-button";
+import { plural } from "@/lib/format";
 
 // How many skills the table shows: the most often missing.
 const TOP_SKILLS = 25;
@@ -102,7 +103,6 @@ function ScopeLink({ scope, current, children }: { scope: "all" | "applied"; cur
 
 function Coverage({ insights, plan, writable }: { insights: Insights; plan: Awaited<ReturnType<typeof getCompareAllPlan>>; writable: boolean }) {
   const { coverage } = insights;
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   return (
     <Card>
       <CardHeader>

@@ -1,6 +1,6 @@
 import type { ParsedResumeLatex } from "@/lib/latex/resume";
 import type { LatexResult } from "@/lib/latex/resume";
-import { entryHeadingText } from "@/lib/profile/items";
+import { entryHeadings } from "@/lib/profile/items";
 import type { Profile } from "@/lib/profile/types";
 import type { TailoringProposal } from "@/lib/schemas/tailoring";
 import type { SkillResolver } from "@/lib/skills/resolver";
@@ -117,11 +117,7 @@ export function listChanges(
 ): ReviewChange[] {
   const changes: ReviewChange[] = [];
   const skillName = new Map(profile.skills.map((s) => [`skill:${s.id}`, s.name]));
-  const entryById = new Map(profile.entries.map((e) => [`entry:${e.id}`, e]));
-  const heading = (id: string) => {
-    const entry = entryById.get(id);
-    return entry ? entryHeadingText(entry) : id;
-  };
+  const heading = entryHeadings(profile);
   const bulletLines = (entry: Entry) => entry.bullets.map((b) => `• ${b.text}`);
 
   // Summary

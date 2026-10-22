@@ -1,6 +1,7 @@
 import "server-only";
+import { generateStructured, parseStructured, type Parsed } from "@/server/llm/structured";
 import type { LlmClient, StructuredRequest } from "@/server/llm/client";
-import { llmError, type LlmResult } from "@/lib/llm-result";
+import type { LlmResult } from "@/lib/llm-result";
 import {
   COVER_LENGTH_WORDS,
   coverLetterOutputSchema,
@@ -84,29 +85,12 @@ export function buildCoverLetterRequest(
 
 export type CoverLetterResult = LlmResult<{ output: CoverLetterOutput; warnings: LetterWarning[]; model: string }>;
 
-type Attempt =
-  | { ok: true; output: CoverLetterOutput; model: string }
-  | { ok: false; malformed: boolean; error: ReturnType<typeof llmError> };
-
-async function attempt(client: LlmClient, request: StructuredRequest): Promise<Attempt> {
-  const response = await client.generateStructured(request);
-  if (!response.ok) return { ok: false, malformed: false, error: response };
-  const { stopReason, text, model } = response.data;
-  if (stopReason === "refusal") return { ok: false, malformed: false, error: llmError("refusal") };
-  if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
-    return { ok: false, malformed: false, error: llmError("truncated") };
-  }
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return { ok: false, malformed: true, error: llmError("malformed_output") };
-  }
-  const parsed = coverLetterOutputSchema.safeParse(json);
-  if (!parsed.success || parsed.data.paragraphs.every((p) => p.trim() === "")) {
-    return { ok: false, malformed: true, error: llmError("malformed_output") };
-  }
-  return { ok: true, output: parsed.data, model };
+// Valid JSON with only empty paragraphs is as useless as malformed JSON,
+// so it's retried the same way.
+function parseLetter(text: string): Parsed<CoverLetterOutput> {
+  const parsed = parseStructured(text, coverLetterOutputSchema);
+  if (parsed.ok && parsed.data.paragraphs.every((p) => p.trim() === "")) return { ok: false, reason: "every paragraph was empty" };
+  return parsed;
 }
 
 export async function writeCoverLetter(input: CoverLetterInput, client: LlmClient): Promise<CoverLetterResult> {
@@ -119,21 +103,17 @@ export async function writeCoverLetter(input: CoverLetterInput, client: LlmClien
       length: input.length,
     });
 
-  const request = buildCoverLetterRequest(input, null);
-  let first = await attempt(client, request);
-  let callsLeft = 1;
-  if (!first.ok && first.malformed) {
-    first = await attempt(client, request);
-    callsLeft = 0;
-  }
-  if (!first.ok) return first.error;
+  // At most two calls: a retry for malformed output, or else one with the
+  // checker's warnings. If that retry fails in any way, the first letter
+  // is kept with its warnings.
+  const first = await generateStructured(client, buildCoverLetterRequest(input, null), parseLetter, "Cover letter");
+  if (!first.ok) return first;
+  const { data: output, model, calls } = first.data;
 
-  const warnings = check(first.output);
-  if (warnings.length === 0 || callsLeft === 0) {
-    return { ok: true, data: { output: first.output, warnings, model: first.model } };
-  }
+  const warnings = check(output);
+  if (warnings.length === 0 || calls >= 2) return { ok: true, data: { output, warnings, model } };
 
-  const second = await attempt(client, buildCoverLetterRequest(input, { previous: first.output, warnings }));
-  if (!second.ok) return { ok: true, data: { output: first.output, warnings, model: first.model } };
-  return { ok: true, data: { output: second.output, warnings: check(second.output), model: second.model } };
+  const second = await generateStructured(client, buildCoverLetterRequest(input, { previous: output, warnings }), parseLetter, "Cover letter", 1);
+  if (!second.ok) return { ok: true, data: { output, warnings, model } };
+  return { ok: true, data: { output: second.data.data, warnings: check(second.data.data), model: second.data.model } };
 }

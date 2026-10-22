@@ -15,8 +15,8 @@ import { requireSession } from "@/server/require-session";
 import { listSavedJobs, type SavedJob } from "@/server/db/jobs";
 import { SavedJobForm } from "./_components/saved-job-form";
 import { MoveToAppliedButton } from "./_components/move-to-applied-button";
+import { formatDate } from "@/lib/format";
 
-const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
 // A Server Component: the list is read straight from the database at
 // render time, and only the interactive pieces (the form dialog and the
@@ -75,7 +75,7 @@ function SavedJobCard({ job, disabled }: { job: SavedJob; disabled: boolean }) {
       <CardHeader>
         <CardTitle>{job.title}</CardTitle>
         <CardDescription>
-          {job.company} · saved {dateFormat.format(job.savedAt)}
+          {job.company} · saved {formatDate(job.savedAt)}
         </CardDescription>
         <CardAction>
           <SavedJobForm

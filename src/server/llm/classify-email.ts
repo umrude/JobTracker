@@ -1,8 +1,8 @@
 import "server-only";
-import { z } from "zod";
+import { generateStructured, parseStructured } from "@/server/llm/structured";
 import type { LlmClient, StructuredRequest } from "@/server/llm/client";
 import { classificationOutputSchema, classificationSchema, type Classification } from "@/lib/schemas/email";
-import { llmError, type LlmResult } from "@/lib/llm-result";
+import type { LlmResult } from "@/lib/llm-result";
 
 // Classifies one email that passed the pre-filter: is it an
 // acknowledgement, an interview, an assessment, a rejection, an offer, or
@@ -66,15 +66,8 @@ export type ParsedClassification = { ok: true; classification: Classification } 
 
 // JSON text -> validated Classification. Never throws.
 export function parseClassification(text: string): ParsedClassification {
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch (error) {
-    return { ok: false, reason: `invalid JSON: ${error instanceof Error ? error.message : String(error)}` };
-  }
-  const result = classificationSchema.safeParse(json);
-  if (!result.success) return { ok: false, reason: `schema violation: ${z.prettifyError(result.error)}` };
-  return { ok: true, classification: result.data };
+  const parsed = parseStructured(text, classificationSchema);
+  return parsed.ok ? { ok: true, classification: parsed.data } : parsed;
 }
 
 export type ClassifyResult = LlmResult<{
@@ -83,26 +76,11 @@ export type ClassifyResult = LlmResult<{
   usage?: { inputTokens: number; outputTokens: number };
 }>;
 
-const MAX_ATTEMPTS = 2;
-
 // Calls the model and validates its output. Like compareResume: only
 // malformed output is retried; refusals and truncation are returned.
 export async function classifyEmail(input: ClassifyInput, client: LlmClient): Promise<ClassifyResult> {
-  const request = buildClassifyRequest(input);
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const response = await client.generateStructured(request);
-    if (!response.ok) return response;
-
-    const { stopReason, text, model, usage } = response.data;
-    if (stopReason === "refusal") return llmError("refusal");
-    if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") return llmError("truncated");
-
-    const parsed = parseClassification(text);
-    if (parsed.ok) return { ok: true, data: { classification: parsed.classification, model, usage } };
-
-    console.warn(`Classification attempt ${attempt}/${MAX_ATTEMPTS} malformed: ${parsed.reason}`);
-  }
-
-  return llmError("malformed_output");
+  const result = await generateStructured(client, buildClassifyRequest(input), (text) => parseStructured(text, classificationSchema), "Classification");
+  if (!result.ok) return result;
+  const { data, model, usage } = result.data;
+  return { ok: true, data: { classification: data, model, usage } };
 }

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 import type { FormState } from "@/lib/form-state";
 import { compareTailoredAction } from "../actions";
+import { ActionMessage } from "@/components/action-message";
 
 const initialState: FormState = { status: "idle" };
 
@@ -34,12 +35,7 @@ export function CompareTailoredButton({
           {pending ? "Comparing..." : rerun ? "Re-run tailored comparison" : "Compare tailored version"}
         </Button>
       </MaybeDisabledTooltip>
-      {pending && <p className="text-xs text-muted-foreground">This can take up to a minute.</p>}
-      {!pending && state.status === "error" && (
-        <p role="alert" className="text-sm text-destructive">
-          {state.message}
-        </p>
-      )}
+      <ActionMessage state={state} pending={pending} slow />
     </form>
   );
 }

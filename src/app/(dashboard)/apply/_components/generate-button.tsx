@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 import type { FormState } from "@/lib/form-state";
 import { generateTailoringAction } from "../actions";
+import { ActionMessage } from "@/components/action-message";
 
 const initialState: FormState = { status: "idle" };
 
@@ -35,12 +36,7 @@ export function GenerateButton({
           {pending ? "Tailoring..." : label}
         </Button>
       </MaybeDisabledTooltip>
-      {pending && <p className="text-xs text-muted-foreground">This can take up to a minute.</p>}
-      {!pending && state.status === "error" && (
-        <p role="alert" className="max-w-sm text-right text-sm text-destructive">
-          {state.message}
-        </p>
-      )}
+      <ActionMessage state={state} pending={pending} slow className="max-w-sm text-right" />
     </form>
   );
 }

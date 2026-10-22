@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, ExternalLinkIcon, FileTextIcon } from "lucide-react";
@@ -26,11 +25,9 @@ import { describeGaps, type GapView } from "@/lib/skills/gaps";
 import { wordingNotes, type WordingNote } from "@/lib/skills/wording";
 import { RunComparisonButton } from "../_components/run-comparison-button";
 import { GapDialog } from "../_components/gap-dialog";
+import { formatDateTime } from "@/lib/format";
+import { Notice } from "@/components/notice";
 
-const dateFormat = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
 
 // A Server Component that only reads: it shows the saved comparison and
 // never calls the model. Running or re-running is an explicit click on
@@ -166,7 +163,7 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
       ) : (
         <>
           <p className="text-xs text-muted-foreground">
-            Compared {dateFormat.format(latest.createdAt)} against resume v
+            Compared {formatDateTime(latest.createdAt)} against resume v
             {latest.resumeVersion} · {latest.model === "demo" ? "demo result" : latest.model}
           </p>
           <ComparisonResult
@@ -181,14 +178,6 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
         </>
       )}
     </div>
-  );
-}
-
-function Notice({ children }: { children: ReactNode }) {
-  return (
-    <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
-      {children}
-    </p>
   );
 }
 

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MaybeDisabledTooltip } from "@/components/demo-tooltip";
 import type { MessageState } from "@/lib/form-state";
 import { importFromResumeAction } from "../actions";
+import { ActionMessage } from "@/components/action-message";
 
 const initialState: MessageState = { status: "idle" };
 
@@ -23,14 +24,7 @@ export function ImportButton({ disabled, disabledMessage }: { disabled: boolean;
           {pending ? "Importing..." : "Import from active resume"}
         </Button>
       </MaybeDisabledTooltip>
-      {state.status !== "idle" && (
-        <p
-          role={state.status === "error" ? "alert" : "status"}
-          className={state.status === "error" ? "max-w-sm text-right text-sm text-destructive" : "max-w-sm text-right text-sm text-muted-foreground"}
-        >
-          {state.message}
-        </p>
-      )}
+      <ActionMessage state={state} showSuccess className="max-w-sm text-right" />
     </form>
   );
 }

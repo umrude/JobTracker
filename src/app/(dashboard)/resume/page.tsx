@@ -14,8 +14,8 @@ import { requireSession } from "@/server/require-session";
 import { listResumes, type Resume } from "@/server/db/resumes";
 import { ResumeUpload } from "./_components/resume-upload";
 import { activateResumeAction } from "./actions";
+import { formatDate } from "@/lib/format";
 
-const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
 // A Server Component: the versions are read from the database at render
 // time. Only the upload/preview flow is a Client Component, since it
@@ -57,7 +57,7 @@ export default async function ResumePage() {
           <CardHeader>
             <CardTitle>Active: version {active.version}</CardTitle>
             <CardDescription>
-              Saved {dateFormat.format(active.createdAt)}
+              Saved {formatDate(active.createdAt)}
               {active.latexSource ? " · LaTeX source attached" : ""}
             </CardDescription>
             {active.latexSource && (
@@ -123,7 +123,7 @@ function VersionRow({ resume, disabled }: { resume: Resume; disabled: boolean })
           <span className="font-medium">Version {resume.version}</span>
           <span className="text-muted-foreground">
             {" "}
-            · {dateFormat.format(resume.createdAt)} ·{" "}
+            · {formatDate(resume.createdAt)} ·{" "}
             {resume.text.length.toLocaleString("en-US")} characters
             {resume.latexSource ? " · LaTeX" : ""}
           </span>

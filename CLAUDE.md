@@ -59,6 +59,7 @@ src/
 - Default to Server Components. Add `"use client"` only when needed (interactivity, hooks, dnd) and keep client components small. Give a Client Component only what it renders (everything passed to one is sent to the browser); load the rest on demand, and don't repeat a big list per row. See docs/performance.md.
 - No `any`. Prefer `unknown` plus narrowing. Avoid `as` casts except at validated boundaries.
 - Pure logic (email pre-filter, matching, status transitions) lives in plain functions with no I/O, and gets unit tests.
+- Reuse the shared pieces instead of writing them again: `ActionMessage` (a Server Action's error/success line, and "This can take up to a minute"), `NativeSelect`, `Notice`, `lib/format.ts` (dates, `plural`), `server/llm/structured.ts` (every model call: structured output, validation, one retry), and `server/latex/pdf-response.ts` (PDF routes).
 ### Gmail sync principles
 - Scope: `gmail.readonly` only.
 - Use the Gmail history API for incremental sync, not full re-scans.

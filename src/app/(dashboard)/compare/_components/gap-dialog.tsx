@@ -18,6 +18,8 @@ import type { FormState } from "@/lib/form-state";
 import { EXPERIENCE_KINDS, PROFICIENCY_LEVELS } from "@/lib/schemas/profile";
 import { EXPERIENCE_LABELS, PROFICIENCY_LABELS } from "@/lib/profile/labels";
 import { confirmGapAction } from "../actions";
+import { ActionMessage } from "@/components/action-message";
+import { NativeSelect } from "@/components/ui/native-select";
 
 type GapDialogProps = {
   jobId: number;
@@ -63,9 +65,6 @@ export function GapDialog(props: GapDialogProps) {
 
 const initialState: FormState = { status: "idle" };
 
-const selectClass =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
-
 function GapForms({ jobId, name, suggestions, categories, onDone }: GapDialogProps & { onDone: () => void }) {
   const [state, formAction, pending] = useActionState(
     async (prevState: FormState, formData: FormData) => {
@@ -87,11 +86,7 @@ function GapForms({ jobId, name, suggestions, categories, onDone }: GapDialogPro
 
   return (
     <div className="space-y-5">
-      {state.status === "error" && (
-        <p role="alert" className="text-sm text-destructive">
-          {state.message}
-        </p>
-      )}
+      <ActionMessage state={state} />
 
       {suggestions.length > 0 && (
         <Section title="Is it a skill you already have under another name?">
@@ -127,25 +122,25 @@ function GapForms({ jobId, name, suggestions, categories, onDone }: GapDialogPro
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`${prefix}-proficiency`}>Proficiency</Label>
-              <select id={`${prefix}-proficiency`} name="proficiency" defaultValue="" className={selectClass}>
+              <NativeSelect id={`${prefix}-proficiency`} name="proficiency" defaultValue="" className="w-full">
                 <option value="">Not set</option>
                 {PROFICIENCY_LEVELS.filter((level) => level !== "learning").map((level) => (
                   <option key={level} value={level}>
                     {PROFICIENCY_LABELS[level]}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`${prefix}-experience`}>Experience</Label>
-              <select id={`${prefix}-experience`} name="experience" defaultValue="" className={selectClass}>
+              <NativeSelect id={`${prefix}-experience`} name="experience" defaultValue="" className="w-full">
                 <option value="">Not set</option>
                 {EXPERIENCE_KINDS.map((kind) => (
                   <option key={kind} value={kind}>
                     {EXPERIENCE_LABELS[kind]}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
           </div>
           <div className="space-y-1.5">

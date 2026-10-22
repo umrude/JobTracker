@@ -18,6 +18,7 @@ import {
 } from "../actions";
 import { ChangeCard, type Decision } from "./change-card";
 import { OutlineEditor } from "./outline-editor";
+import { ActionMessage } from "@/components/action-message";
 
 const idle: MessageState = { status: "idle" };
 const lengthIdle: LengthState = { status: "idle" };
@@ -147,7 +148,7 @@ export function ReviewPanel({
         </div>
       </div>
 
-      <StateMessage state={editState} />
+      <ActionMessage showSuccess state={editState} />
 
       {changes.length === 0 && (
         <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -209,7 +210,7 @@ export function ReviewPanel({
             {revising ? "Revising..." : `Revise with ${noteCount === 1 ? "1 note" : `${noteCount} notes`}`}
           </Button>
         </div>
-        <StateMessage state={reviseState} />
+        <ActionMessage showSuccess state={reviseState} />
       </div>
 
       <div className="flex flex-col items-end gap-2 border-t pt-4">
@@ -233,17 +234,8 @@ export function ReviewPanel({
           </p>
         )}
         {!allDecided && !disabled && <p className="text-xs text-muted-foreground">Accept or reject every change to approve.</p>}
-        <StateMessage state={approveState} />
+        <ActionMessage showSuccess state={approveState} />
       </div>
     </div>
-  );
-}
-
-function StateMessage({ state }: { state: MessageState }) {
-  if (state.status === "idle") return null;
-  return (
-    <p role={state.status === "error" ? "alert" : "status"} className={cn("text-sm", state.status === "error" && "text-destructive")}>
-      {state.message}
-    </p>
   );
 }

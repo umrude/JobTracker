@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 import type { SuggestionRow } from "@/server/db/email-event-store";
 import { AddApplicationForm, DecisionButtons, LinkForm } from "./suggestion-actions";
 import type { LinkOption } from "./link-choices";
+import { formatDate } from "@/lib/format";
 
-const dateFormat = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
 const MATCH_LABELS: Record<MatchMethod, string> = {
   thread: "linked by thread",
@@ -44,7 +44,7 @@ export function SuggestionCard({
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <TypeBadge row={row} />
-          {row.receivedAt && <span className="text-muted-foreground">{dateFormat.format(row.receivedAt)}</span>}
+          {row.receivedAt && <span className="text-muted-foreground">{formatDate(row.receivedAt)}</span>}
           {row.matchMethod && !ghosted && <span className="text-muted-foreground">· {MATCH_LABELS[row.matchMethod]}</span>}
         </div>
 

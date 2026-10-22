@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { MessageState } from "@/lib/form-state";
 import { chooseSyncStartAction } from "../actions";
+import { ActionMessage } from "@/components/action-message";
 
 const initialState: MessageState = { status: "idle" };
 
@@ -24,14 +25,7 @@ export function SyncStartForm({ value, min, max }: { value: string; min: string;
           {pending ? "Saving..." : "Save"}
         </Button>
       </div>
-      {state.status !== "idle" && (
-        <p
-          role={state.status === "error" ? "alert" : "status"}
-          className={state.status === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
-        >
-          {state.message}
-        </p>
-      )}
+      <ActionMessage state={state} showSuccess />
     </form>
   );
 }

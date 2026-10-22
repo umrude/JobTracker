@@ -1,12 +1,12 @@
 import "server-only";
-import { z } from "zod";
+import { generateStructured, parseStructured } from "@/server/llm/structured";
 import type { LlmClient, StructuredRequest } from "@/server/llm/client";
 import {
   comparisonOutputSchema,
   comparisonSchema,
   type Comparison,
 } from "@/lib/schemas/comparison";
-import { llmError, type LlmResult } from "@/lib/llm-result";
+import type { LlmResult } from "@/lib/llm-result";
 
 // Comparison output is a few hundred tokens of JSON. This leaves plenty of
 // headroom (adaptive thinking also counts against it) while staying under
@@ -41,9 +41,6 @@ export function buildCompareRequest(
 
 export type CompareResult = LlmResult<{ comparison: Comparison; model: string }>;
 
-// The first try plus one retry, for malformed output only.
-const MAX_ATTEMPTS = 2;
-
 export type ParsedComparison =
   | { ok: true; comparison: Comparison }
   | { ok: false; reason: string };
@@ -51,21 +48,8 @@ export type ParsedComparison =
 // JSON text -> validated Comparison. Never throws: a failure comes back as
 // a reason string, which is logged on the server and never shown to the user.
 export function parseComparison(text: string): ParsedComparison {
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-
-  const result = comparisonSchema.safeParse(json);
-  if (!result.success) {
-    return { ok: false, reason: `schema violation: ${z.prettifyError(result.error)}` };
-  }
-  return { ok: true, comparison: result.data };
+  const parsed = parseStructured(text, comparisonSchema);
+  return parsed.ok ? { ok: true, comparison: parsed.data } : parsed;
 }
 
 // Calls the model and validates its output. Only malformed output is
@@ -76,23 +60,6 @@ export async function compareResume(
   resume: string,
   client: LlmClient,
 ): Promise<CompareResult> {
-  const request = buildCompareRequest(listing, resume);
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const response = await client.generateStructured(request);
-    if (!response.ok) return response;
-
-    const { stopReason, text, model } = response.data;
-    if (stopReason === "refusal") return llmError("refusal");
-    if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
-      return llmError("truncated");
-    }
-
-    const parsed = parseComparison(text);
-    if (parsed.ok) return { ok: true, data: { comparison: parsed.comparison, model } };
-
-    console.warn(`Comparison attempt ${attempt}/${MAX_ATTEMPTS} malformed: ${parsed.reason}`);
-  }
-
-  return llmError("malformed_output");
+  const result = await generateStructured(client, buildCompareRequest(listing, resume), (text) => parseStructured(text, comparisonSchema), "Comparison");
+  return result.ok ? { ok: true, data: { comparison: result.data.data, model: result.data.model } } : result;
 }

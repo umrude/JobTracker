@@ -26,7 +26,7 @@ import {
   wordedItemOf,
   type Outline,
 } from "@/lib/tailoring/edits";
-import { entryHeadingText } from "@/lib/profile/items";
+import { entryHeadings } from "@/lib/profile/items";
 import { currentAsProposal, listChanges, type ReviewChange } from "@/lib/tailoring/changes";
 import type { LlmError } from "@/lib/llm-result";
 import { createSkillResolver } from "@/lib/skills/resolver";
@@ -251,6 +251,7 @@ export async function getTailoringReview(jobId: number): Promise<TailoringReview
     pages = pdf.ok ? pdf.pages : null;
   }
   const current = currentAsProposal(context.profile, context.tex, context.resolver);
+  const heading = entryHeadings(context.profile);
   const trimEntries =
     final.success && current.ok
       ? mergedSections(current.proposal, final.data)
@@ -258,17 +259,13 @@ export async function getTailoringReview(jobId: number): Promise<TailoringReview
           .flatMap((section) =>
             section.entries.map((entry) => ({
               entryId: entry.entryId,
-              heading: `${section.section}: ${headingFor(context.profile, entry.entryId)}`,
+              heading: `${section.section}: ${heading(entry.entryId)}`,
             })),
           )
       : [];
   return { ...review, trimSuggestions, trimEntries, pages };
 }
 
-function headingFor(profile: Profile, entryId: string): string {
-  const entry = profile.entries.find((e) => `entry:${e.id}` === entryId);
-  return entry ? entryHeadingText(entry) : entryId;
-}
 
 type ReadyContext = Extract<TailoringContext, { ok: true }>;
 
