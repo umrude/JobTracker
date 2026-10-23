@@ -51,16 +51,19 @@ export function NavLinks({ inboxCount, variant }: { inboxCount: number; variant:
       <Link
         key={href}
         href={href}
+        title={label}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+          "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+          // In the collapsed sidebar (sidebar.tsx): the icon alone, centered.
+          "group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0",
           active && "bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
         )}
       >
         <Icon className="size-[18px] shrink-0" />
-        {label}
+        <span className="group-data-[collapsed=true]/sidebar:sr-only">{label}</span>
         {href === "/inbox-review" && inboxCount > 0 && (
-          <span className="ml-auto rounded-full bg-primary px-1.5 py-px text-[11px] leading-4 font-semibold text-primary-foreground tabular-nums">
+          <span className="ml-auto rounded-full bg-primary px-1.5 py-px text-[11px] leading-4 font-semibold text-primary-foreground tabular-nums group-data-[collapsed=true]/sidebar:absolute group-data-[collapsed=true]/sidebar:-top-0.5 group-data-[collapsed=true]/sidebar:right-0 group-data-[collapsed=true]/sidebar:px-1 group-data-[collapsed=true]/sidebar:text-[10px] group-data-[collapsed=true]/sidebar:leading-3.5">
             {inboxCount}
           </span>
         )}
@@ -76,7 +79,9 @@ export function NavLinks({ inboxCount, variant }: { inboxCount: number; variant:
     <nav className="flex flex-col gap-6">
       {GROUPS.map((group) => (
         <div key={group.label} className="flex flex-col gap-1">
-          <p className="px-3 pb-1 text-[11px] font-semibold tracking-[0.18em] text-muted-foreground/80 uppercase">{group.label}</p>
+          <p className="px-3 pb-1 text-[11px] font-semibold tracking-[0.18em] whitespace-nowrap text-muted-foreground/80 uppercase group-data-[collapsed=true]/sidebar:sr-only">
+            {group.label}
+          </p>
           {group.links.map(link)}
         </div>
       ))}

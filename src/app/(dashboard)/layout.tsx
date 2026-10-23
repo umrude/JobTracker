@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { BellIcon, FlaskConicalIcon, LogOutIcon } from "lucide-react";
 import { getMode } from "@/server/mode";
 import { auth, signOut } from "@/server/auth";
@@ -12,6 +13,12 @@ import { ThemeToggle } from "@/components/theme";
 import { Logo } from "@/components/logo";
 import { toggleDemoModeAction } from "./mode-actions";
 import { NavLinks } from "./nav-links";
+import { Sidebar } from "./sidebar";
+import { SIDEBAR_COOKIE } from "@/lib/sidebar";
+
+// Text that the collapsed sidebar hides visually, keeping it for screen
+// readers (see sidebar.tsx).
+const COLLAPSED_SR_ONLY = "group-data-[collapsed=true]/sidebar:sr-only";
 
 // The app's frame: a sidebar (wide screens) or a nav bar (small screens),
 // and a header with search, the theme, the Inbox, and who's signed in.
@@ -33,27 +40,35 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // The public demo has no session but does have suggestions to show.
   const inboxCount = session?.user || env.DEMO_MODE ? await countPendingSuggestions() : 0;
   const email = session?.user?.email ?? null;
+  const sidebarCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "1";
 
   return (
     <div className="flex min-h-full flex-1">
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r bg-sidebar md:flex">
-        <div className="px-5 pt-5 pb-6">
-          <Logo />
+      <Sidebar initialCollapsed={sidebarCollapsed}>
+        <div className="px-5 pt-5 pb-6 group-data-[collapsed=true]/sidebar:px-3.5">
+          <Logo nameClassName={COLLAPSED_SR_ONLY} />
         </div>
-        <div className="flex-1 overflow-y-auto px-3">
+        <div className="flex-1 overflow-x-hidden overflow-y-auto px-3">
           <NavLinks inboxCount={inboxCount} variant="sidebar" />
         </div>
-        <div className="space-y-2 border-t p-3">
+        <div className="border-t p-3 pb-0 group-data-[collapsed=true]/sidebar:px-2">
           {env.DEMO_MODE ? (
-            <p className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs text-accent-foreground">
+            <p
+              title="Read-only demo with sample data."
+              className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs text-accent-foreground group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
+            >
               <FlaskConicalIcon className="size-4 shrink-0" />
-              Read-only demo with sample data.
+              <span className={COLLAPSED_SR_ONLY}>Read-only demo with sample data.</span>
             </p>
           ) : (
-            <DemoToggle inDemo={mode === "demo"} className="w-full justify-start" />
+            <DemoToggle
+              inDemo={mode === "demo"}
+              className="w-full justify-start group-data-[collapsed=true]/sidebar:justify-center"
+              labelClassName={COLLAPSED_SR_ONLY}
+            />
           )}
         </div>
-      </aside>
+      </Sidebar>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-card/85 px-4 backdrop-blur md:px-6">
@@ -116,12 +131,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
 // "Preview demo mode" / "Back to live data" (the local, writable preview;
 // see mode.ts). Not shown on the public demo, which is always demo.
-function DemoToggle({ inDemo, className }: { inDemo: boolean; className?: string }) {
+function DemoToggle({ inDemo, className, labelClassName }: { inDemo: boolean; className?: string; labelClassName?: string }) {
+  const label = inDemo ? "Back to live data" : "Preview demo mode";
   return (
     <form action={toggleDemoModeAction}>
-      <Button type="submit" variant="ghost" size="sm" className={`gap-2 text-muted-foreground ${className ?? ""}`}>
+      <Button type="submit" variant="ghost" size="sm" title={label} className={`gap-2 text-muted-foreground ${className ?? ""}`}>
         <FlaskConicalIcon />
-        {inDemo ? "Back to live data" : "Preview demo mode"}
+        <span className={labelClassName}>{label}</span>
       </Button>
     </form>
   );

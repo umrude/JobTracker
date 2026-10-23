@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The dev-only Next.js badge defaults to the bottom left, on top of the
+  // sidebar's Collapse button.
+  devIndicators: { position: "bottom-right" },
   experimental: {
     serverActions: {
       // Server Actions cap request bodies at 1 MB by default. Resume

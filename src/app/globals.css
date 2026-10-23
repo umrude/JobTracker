@@ -137,4 +137,12 @@
   html {
     @apply font-sans;
   }
+  /* A native <select>'s open list. Chrome on Windows draws it on white
+     when the select itself is transparent (ours are), so in dark mode the
+     inherited light text came out pale on white. Give options the popover
+     colors so the list matches the theme. */
+  option,
+  optgroup {
+    @apply bg-popover text-popover-foreground;
+  }
 }

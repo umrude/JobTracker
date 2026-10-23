@@ -32,6 +32,7 @@ Light, dark, or follow the system, with the toggle in the header (and on the sig
 
 - **No flash:** `components/theme-script.tsx` runs a tiny inline script in `<head>` that sets the `dark` class before the page paints. It's a Server Component because React doesn't run scripts rendered by Client Components. `<html>` has `suppressHydrationWarning`, since its class legitimately differs from the server's.
 - **The choice is per device,** in `localStorage`, not the database. "System" (the default) follows the OS, including when it changes while the app is open.
+- **Native dropdowns:** Chrome on Windows draws a `<select>`'s open list on white when the select is transparent, so in dark mode the options were pale text on white. `option` and `optgroup` get the popover colors in `globals.css`.
 - **The toggle** (`components/theme.tsx`) reads the choice with `useSyncExternalStore`: the server renders "System", and the browser switches to the stored choice right after, with no hydration mismatch.
 
 ## The shell
@@ -39,6 +40,11 @@ Light, dark, or follow the system, with the toggle in the header (and on the sig
 `app/(dashboard)/layout.tsx`:
 
 - **Sidebar** (wide screens): the logo, nav grouped as Job search (Board, Saved jobs, Compare, Inbox with its count, Insights) and You (Resume, Profile), and the demo controls at the bottom.
+- **Collapsing the sidebar:** "Collapse" at the bottom shrinks it to icons. Each link keeps its name as a tooltip and for screen readers, and the Inbox count sits on its icon.
+  - **Remembered in a cookie** (`sidebar-collapsed`), not localStorage. The layout is a Server Component and can read a cookie, so the first paint already has the right width, with no flash and no hydration mismatch.
+  - **Only the toggle is client code.** `sidebar.tsx` is a small Client Component holding the state. Everything inside it is rendered by the layout and passed in as children, and adapts through CSS: the sidebar sets `data-collapsed`, and its contents use the `group-data-[collapsed=true]/sidebar:` variant (for example, `sr-only` on labels).
+  - **Not a Server Action.** It's a display preference, not data, so it also works in the read-only demo.
+  - **The dev badge:** the Next.js badge (dev only) is moved to the bottom right in `next.config.ts`, since it covered the Collapse button.
 - **Header:** search, the theme toggle, an Inbox bell (with a dot when something's waiting), and your initial with sign-out.
 - **Small screens:** the sidebar becomes a scrollable nav row under the header.
 
