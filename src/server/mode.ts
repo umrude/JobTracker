@@ -23,7 +23,15 @@ export function resolveMode(
 // function instead of reading DEMO_MODE or the cookie directly.
 export async function getMode(): Promise<Mode> {
   const cookieStore = await cookies();
-  return resolveMode(env.DEMO_MODE, cookieStore.get(DEMO_MODE_COOKIE)?.value);
+  return resolveMode(isPublicDemo(), cookieStore.get(DEMO_MODE_COOKIE)?.value);
+}
+
+// Whether this deployment is the public demo (DEMO_MODE=true): read-only,
+// no sign-in, no secrets. Unlike getMode(), the cookie never changes it,
+// so it's the check for trust decisions (sessions, writes, auth routes).
+// Every such check goes through here rather than reading env.DEMO_MODE.
+export function isPublicDemo(): boolean {
+  return env.DEMO_MODE;
 }
 
 // Whether writes are allowed at all. Deliberately keyed off the deployment
@@ -32,7 +40,7 @@ export async function getMode(): Promise<Mode> {
 // stays writable, so CRUD features can be developed/tested against
 // realistic seed data.
 export function isWritable(): boolean {
-  return !env.DEMO_MODE;
+  return !isPublicDemo();
 }
 
 // Every Server Action or route handler that writes must call this first.

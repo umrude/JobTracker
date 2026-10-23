@@ -2,9 +2,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { BellIcon, FlaskConicalIcon, LogOutIcon } from "lucide-react";
-import { getMode } from "@/server/mode";
+import { getMode, isPublicDemo } from "@/server/mode";
 import { auth, signOut } from "@/server/auth";
-import { env } from "@/server/env";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { gmailNeedsReconnect } from "@/server/db/gmail-connections";
 import { countPendingSuggestions } from "@/server/db/email-events";
@@ -33,12 +32,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const mode = await getMode();
   // A public demo deployment never has a session; a cookie-toggled local
   // demo preview still runs on a live deployment, so it does.
-  const session = !env.DEMO_MODE ? await auth() : null;
+  const publicDemo = isPublicDemo();
+  const session = !publicDemo ? await auth() : null;
   // On every page, since an expired connection quietly stops sync. Only
   // with a session: without one, the page itself redirects to sign-in.
   const reconnectGmail = session?.user ? await gmailNeedsReconnect() : false;
   // The public demo has no session but does have suggestions to show.
-  const inboxCount = session?.user || env.DEMO_MODE ? await countPendingSuggestions() : 0;
+  const inboxCount = session?.user || publicDemo ? await countPendingSuggestions() : 0;
   const email = session?.user?.email ?? null;
   const sidebarCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "1";
 
@@ -52,7 +52,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <NavLinks inboxCount={inboxCount} variant="sidebar" />
         </div>
         <div className="border-t p-3 pb-0 group-data-[collapsed=true]/sidebar:px-2">
-          {env.DEMO_MODE ? (
+          {publicDemo ? (
             <p
               title="Read-only demo with sample data."
               className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs text-accent-foreground group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
@@ -111,7 +111,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <NavLinks inboxCount={inboxCount} variant="bar" />
           <div className="flex items-center justify-between gap-2 px-4 pb-2 sm:justify-end">
             <ThemeToggle className="sm:hidden" />
-            {!env.DEMO_MODE && <DemoToggle inDemo={mode === "demo"} />}
+            {!publicDemo && <DemoToggle inDemo={mode === "demo"} />}
           </div>
         </div>
 

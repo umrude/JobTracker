@@ -15,10 +15,29 @@ test("the board shows seeded applications and filters them", async ({ page }) =>
   await expect(page.getByText("Cobalt Harbor")).toHaveCount(0);
 });
 
-test("the demo is read-only", async ({ page }) => {
+test("the demo is read-only and has no sign-in", async ({ page, request }) => {
   await page.goto("/board");
   await expect(page.getByText("Read-only demo with sample data.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add application" })).toBeDisabled();
+
+  // Writes are refused on the server, not just disabled in the UI.
+  const sync = await request.post("/api/sync");
+  expect(sync.status()).toBe(403);
+  expect(await sync.json()).toMatchObject({ ok: false });
+  // Nothing to sign in to: the login page sends you to the board, and the
+  // auth routes don't exist (the demo has no AUTH_SECRET).
+  await page.goto("/login");
+  await expect(page).toHaveURL(/\/board$/);
+  expect((await request.get("/api/auth/session")).status()).toBe(404);
+});
+
+test("PDFs are served pre-built, never compiled", async ({ page, request }) => {
+  await page.goto("/resume");
+  const href = await page.getByRole("link", { name: "View PDF" }).first().getAttribute("href");
+  expect(href).toMatch(/^\/api\/resumes\/\d+\/pdf$/);
+  const response = await request.get(href ?? "");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toBe("application/pdf");
 });
 
 test("search finds a company and opens it", async ({ page }) => {

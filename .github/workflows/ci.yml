@@ -13,12 +13,9 @@ concurrency:
 permissions:
   contents: read
 
-# No real secrets anywhere: unit tests mock the Anthropic client and Gmail,
-# and e2e runs the demo, which never calls an external service. These two
-# are required by env.ts at startup, so CI passes placeholders.
-env:
-  ALLOWED_EMAIL: ci@example.com
-  AUTH_SECRET: ci-placeholder-not-a-secret
+# No secrets at all: unit tests mock the Anthropic client and Gmail, and
+# e2e runs the public demo build, which needs none and never calls an
+# external service. That also proves the demo deploys without any.
 
 jobs:
   checks:
@@ -52,10 +49,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm db:seed
+      # The same build the hosted demo runs (render.yaml).
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
-      # playwright.config.ts starts the production server (pnpm start) on CI.
+      # playwright.config.ts starts the production server (pnpm start) on
+      # CI, which seeds the demo as it starts.
       - run: pnpm test:e2e
       - name: Upload the Playwright report
         if: failure()

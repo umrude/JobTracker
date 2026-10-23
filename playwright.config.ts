@@ -4,7 +4,8 @@ import { defineConfig, devices } from "@playwright/test";
 // fake data, no sign-in, and no external calls, so they need no secrets.
 // In CI the server is the production build (the workflow builds first);
 // locally it's the dev server, on its own port so it doesn't clash with
-// yours. Seeding first makes every run start from the same data.
+// yours. The server reseeds the demo when it starts (src/instrumentation.ts),
+// so every run starts from the same data.
 const PORT = 3100;
 const CI = Boolean(process.env.CI);
 
@@ -20,7 +21,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: `pnpm db:seed && pnpm ${CI ? "start" : "dev"} --port ${PORT}`,
+    command: `pnpm ${CI ? "start" : "dev"} --port ${PORT}`,
     url: `http://localhost:${PORT}/board`,
     // Locally, reuse a demo server you already started on this port.
     reuseExistingServer: !CI,

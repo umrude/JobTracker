@@ -3,7 +3,7 @@ import { GitCompareArrowsIcon, InboxIcon, SparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme";
-import { env } from "@/server/env";
+import { isPublicDemo } from "@/server/mode";
 import { auth, signIn } from "@/server/auth";
 
 const FEATURES = [
@@ -14,7 +14,7 @@ const FEATURES = [
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   // Nothing to log into in a demo deployment: there's no session to have.
-  if (env.DEMO_MODE) {
+  if (isPublicDemo()) {
     redirect("/board");
   }
 

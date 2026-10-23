@@ -123,31 +123,43 @@ The main choices and the reasons for them. Each doc has more detail.
 
 Requires Node.js 20+ and pnpm.
 
+### Demo mode (no accounts, keys, or `.env`)
+
 ```bash
 pnpm install
-cp .env.example .env
-```
-
-Set `AUTH_SECRET` in `.env` (generate one with `npx auth secret`).
-
-### Demo mode (no accounts or API keys)
-
-```bash
-pnpm db:seed                 # builds the demo database
 DEMO_MODE=true pnpm dev      # PowerShell: $env:DEMO_MODE="true"; pnpm dev
 ```
 
-Open http://localhost:3000. The demo is read-only, with a fake person, resume, and inbox.
+Open http://localhost:3000. The demo is read-only, with a fake person, resume, and inbox. The server builds the demo database from the seed each time it starts.
 
 ### Live mode
 
-1. **Google sign-in.** Create an OAuth client in Google Cloud Console, then set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `ALLOWED_EMAIL` (the only account allowed to sign in). The redirect URIs to register are listed in `.env.example`.
+Copy `.env.example` to `.env`, then:
+
+1. **Google sign-in.** Create an OAuth client in Google Cloud Console, then set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_EMAIL` (the only account allowed to sign in), and `AUTH_SECRET` (generate one with `npx auth secret`). The redirect URIs to register are listed in `.env.example`.
 2. **Anthropic API key.** Set `ANTHROPIC_API_KEY` for comparisons, tailoring, cover letters, and email classification.
 3. **Gmail (optional).** Enable the Gmail API, add the `gmail.readonly` scope, and set `TOKEN_ENCRYPTION_KEY`. Step by step: [docs/gmail-sync.md](docs/gmail-sync.md).
 4. **Tectonic (optional).** Install [Tectonic](https://tectonic-typesetting.github.io/) for tailored resume PDFs, and compile your resume once from a terminal to download its packages.
 5. **Start it.** Run `pnpm db:migrate`, then `pnpm build && pnpm start`.
 
 In live mode, "Preview demo mode" in the sidebar switches to a writable copy of the demo data, reset on every restart.
+
+### Hosted demo
+
+The public demo is the same app with `DEMO_MODE=true`, deployed separately from the live app. It needs no secrets: there's no sign-in, no Anthropic key, and no Gmail. It has no disk either, since the server rebuilds the demo database from the seed when it starts.
+
+- **On Render:** [render.yaml](render.yaml) is a Blueprint for a free web service. In the Render dashboard, choose New > Blueprint and pick this repository. It redeploys on every push to main.
+- **On any other Node host:** set `DEMO_MODE=true`, then use these commands:
+  - build: `corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build`
+  - start: `pnpm start`
+
+What keeps it safe to leave public:
+- **Writes are refused on the server**, not just disabled in the UI.
+- **Nothing on the host can reach real data**, and the demo never calls an external service.
+- **The auth routes return 404.**
+- **Every response gets basic security headers:** no framing, no MIME sniffing, and a strict referrer policy.
+
+CI runs the end-to-end tests against this exact build.
 
 ### Commands
 
@@ -157,7 +169,7 @@ In live mode, "Preview demo mode" in the sidebar switches to a writable copy of 
 | `pnpm build` / `pnpm start` | Production build and server |
 | `pnpm typecheck` / `pnpm lint` / `pnpm test` | Type check, lint, unit tests |
 | `pnpm test:e2e` | End-to-end tests against the demo (starts its own server on port 3100) |
-| `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / build the demo database |
+| `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / rebuild the demo database (the server also does this when it starts) |
 | `pnpm demo:pdfs` | Rebuild the demo's pre-built PDFs (needs Tectonic) |
 | `pnpm eval:classifier` | Run the email classifier on its eval set (real API calls, a few cents) |
 | `pnpm perf:seed` / `pnpm perf:measure` | Build a large database and time each page ([performance](docs/performance.md)) |
@@ -173,7 +185,7 @@ About 490 unit tests run with Vitest, and none of them call the real Anthropic A
 - **Migrations:** checked for the foreign-key rules Drizzle doesn't generate.
 - **Real Tectonic:** one test compiles the demo resume with the real compiler when Tectonic is on your PATH, and is skipped otherwise.
 
-**End-to-end tests** (Playwright, in `e2e/`) drive the demo in a real browser. They cover the board and its filter, read-only mode, search, a comparison leading to a tailored resume and its honesty check, the inbox, insights, and the theme and sidebar being remembered across reloads.
+**End-to-end tests** (Playwright, in `e2e/`) drive the demo in a real browser. They cover the board and its filter, read-only mode (including the server refusing a write, and the auth routes returning 404), pre-built PDFs, search, a comparison leading to a tailored resume and its honesty check, the inbox, insights, and the theme and sidebar being remembered across reloads.
 
 **CI** (GitHub Actions) runs on every push and pull request with no real secrets. One job runs the type check, lint, and unit tests. The other seeds the demo, makes a production build, and runs the end-to-end tests against it. On failure, the Playwright report is uploaded as an artifact.
 

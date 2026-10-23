@@ -1,0 +1,24 @@
+# The public, read-only demo on Render (render.com), as a Blueprint: in the
+# Render dashboard, New > Blueprint, and pick this repository. Deploys on
+# every push to main. See "Hosted demo" in the README.
+#
+# Demo mode needs no secrets: no sign-in, no Anthropic key, no Gmail. The
+# demo database isn't on a disk; the server rebuilds it from the seed each
+# time it starts (src/instrumentation.ts). Any Node host can run it with
+# the same build and start commands.
+services:
+  - type: web
+    name: job-tracker-demo
+    runtime: node
+    plan: free
+    # Dev dependencies (TypeScript, Tailwind) are needed to build.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /board
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"

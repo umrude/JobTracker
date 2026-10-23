@@ -21,7 +21,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // This is the single-user restriction: only ALLOWED_EMAIL may ever
     // get a session, regardless of what Google account signs in.
     async signIn({ user }) {
-      return user.email === env.ALLOWED_EMAIL;
+      // Both must be present: undefined === undefined would let in an
+      // account with no email if ALLOWED_EMAIL were ever unset.
+      return Boolean(env.ALLOWED_EMAIL && user.email && user.email === env.ALLOWED_EMAIL);
     },
   },
 });

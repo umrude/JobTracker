@@ -2,17 +2,16 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { env } from "@/server/env";
-import { DEMO_MODE_COOKIE, resolveMode } from "@/server/mode";
+import { DEMO_MODE_COOKIE, isPublicDemo, resolveMode } from "@/server/mode";
 
 // Flips the local "writable demo preview" cookie (see mode.ts). No-op on a
 // public demo deployment, where the cookie is ignored anyway.
 export async function toggleDemoModeAction() {
-  if (env.DEMO_MODE) return;
+  if (isPublicDemo()) return;
 
   const cookieStore = await cookies();
   const current = resolveMode(
-    env.DEMO_MODE,
+    isPublicDemo(),
     cookieStore.get(DEMO_MODE_COOKIE)?.value,
   );
 
