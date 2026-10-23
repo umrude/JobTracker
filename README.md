@@ -8,7 +8,7 @@ Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It r
 
 **[Try the live demo →](https://job-tracker-demo-f7ye.onrender.com/)** It's read-only, with a fake person, resume, and inbox. It's on a free host that sleeps when idle, so the first visit can take up to a minute.
 
-![The board, with applications grouped by status](docs/screenshots/board.png)
+![A tour of the demo: searching for a company, its comparison, the tailored resume review with its honesty check, then dark mode](docs/screenshots/demo.gif)
 
 ## What it does
 
@@ -25,10 +25,8 @@ Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It r
 | ![A comparison: match score, skills you have, gaps, and missing keywords](docs/screenshots/comparison.png) | ![Reviewing a tailored resume change by change, with a change the honesty check reverted](docs/screenshots/tailored-resume.png) |
 | **Inbox review** | **Insights** |
 | ![Suggestions from email, each waiting for confirmation](docs/screenshots/inbox.png) | ![Skill gaps across listings, with outcome counts](docs/screenshots/insights.png) |
-
-Dark mode, and a sidebar that collapses to icons:
-
-![The board in dark mode](docs/screenshots/board-dark.png)
+| **Board** | **Dark mode** |
+| ![The board, with applications grouped by status](docs/screenshots/board.png) | ![The board in dark mode](docs/screenshots/board-dark.png) |
 
 ## Highlights
 
@@ -176,6 +174,7 @@ CI runs the end-to-end tests against this exact build. To check the deployed dem
 | `pnpm eval:classifier` | Run the email classifier on its eval set (real API calls, a few cents) |
 | `pnpm perf:seed` / `pnpm perf:measure` | Build a large database and time each page ([performance](docs/performance.md)) |
 | `pnpm screenshots` | Retake this README's screenshots from a running demo |
+| `pnpm demo:gif` | Re-record this README's demo GIF from a running demo |
 
 ## Testing
 

@@ -17,7 +17,8 @@
     "eval:classifier": "tsx --conditions=react-server --env-file=.env scripts/eval-classifier.ts",
     "perf:seed": "tsx scripts/perf-seed.ts",
     "perf:measure": "tsx scripts/perf-measure.ts",
-    "screenshots": "tsx scripts/screenshots.ts"
+    "screenshots": "tsx scripts/screenshots.ts",
+    "demo:gif": "tsx scripts/demo-gif.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -46,12 +47,15 @@
     "@tailwindcss/turbopack": "^4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "gifenc": "^1.0.3",
     "jszip": "^3.10.2",
+    "pngjs": "^7.0.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
