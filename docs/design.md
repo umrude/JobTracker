@@ -20,8 +20,10 @@ All colors are CSS variables in `app/globals.css` (oklch), used through Tailwind
 
 ## Color with meaning
 
-- **Statuses** (`lib/status-style.ts`): one color each (Applied sky, Acknowledged violet, Interviewing amber, Offer emerald, Rejected rose, Ghosted grey), used for the board's column dots and status pills. Each pill has a dark-mode text color.
-- **Companies** (`components/company-avatar.tsx`): initials on a color picked from the company's name by a small hash, so a company looks the same wherever it appears.
+- **Statuses** (`lib/status-style.ts`): one color each (Applied sky, Acknowledged violet, Interviewing amber, Offer emerald, Rejected rose, Ghosted grey), used for the board's column dots and status pills. Pill text is the 800 shade in light mode and the 300 shade in dark, for 4.5:1 contrast on the tinted background.
+- **Companies** (`components/company-avatar.tsx`): initials on a color picked from the company's name by a small hash, so a company looks the same wherever it appears. The shades (600–700) are dark enough for the small white initials to reach 4.5:1.
+
+Every color pairing is checked for contrast by the accessibility tests ([accessibility.md](accessibility.md)).
 - **Pills on cards:** Passed screening (emerald) and No listing (grey).
 
 Class names are always written out in full, never assembled from parts, so Tailwind finds them.
@@ -50,8 +52,15 @@ Light, dark, or follow the system, with the toggle in the header (and on the sig
 
 ## The board
 
-Columns are white panels with small spaced uppercase headings, a status dot, a count, and an empty state ("Drag a card here"). Each card has its pills, the role, the company avatar and name, and "Applied 3w ago" (`sinceLabel`). A dragged card lifts and tilts slightly.
+Columns are white panels with small spaced uppercase headings, a status dot, a count, and an empty state ("Drag a card here"). Each card has its pills, the role, the company avatar and name, a grip handle (for keyboard and screen-reader dragging), and "Applied 3w ago" (`sinceLabel`). A dragged card lifts and tilts slightly.
+
+- **Wide screens:** columns are equal height, so each one is a full-height drop target.
+- **Phones:** each column fits its own cards, and you swipe between them. A card is dragged with a press and hold, so a swipe still scrolls.
+
+## Phones
+
+The sidebar becomes a scrollable nav row with the theme toggle under the header. Card headers with an action stack it below the title when the card is narrow, using a container query on `CardHeader`, so this follows the card's width, not the screen's. Rows of buttons wrap rather than run off the edge. Details: [accessibility.md](accessibility.md).
 
 ## Checking it
 
-Changes to the look are checked with real screenshots (Playwright, against the demo), in light and dark, desktop and phone. Tests don't catch a serif font or a grey card.
+Changes to the look are checked with real screenshots (Playwright, against the demo), in light and dark, desktop and phone. Tests don't catch a serif font or a grey card. Contrast, headings, and landmarks are checked by axe in `e2e/accessibility.spec.ts`.

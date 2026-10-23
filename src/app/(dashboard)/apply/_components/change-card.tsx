@@ -62,7 +62,8 @@ export function ChangeCard({
           {change.label}
           {edited && <span className="ml-2 rounded-full border px-1.5 py-px text-xs font-normal text-muted-foreground">your wording</span>}
         </p>
-        <div className="flex shrink-0 flex-wrap gap-1">
+        {/* Wraps on narrow screens (no shrink-0, which kept it one row wide). */}
+        <div className="flex flex-wrap gap-1">
           {wordedItem && !editing && (
             <Button
               type="button"

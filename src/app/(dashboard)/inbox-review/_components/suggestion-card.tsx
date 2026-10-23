@@ -49,12 +49,14 @@ export function SuggestionCard({
         </div>
 
         {ghosted ? (
-          <p className="font-medium">
+          // h3: each suggestion is a stop in a screen reader’s heading
+          // list, under "To review" (h2).
+          <h3 className="font-medium">
             No reply from {row.company} about {row.title}. Ghosted?
-          </p>
+          </h3>
         ) : (
           <>
-            <p className="font-medium break-words">{row.subject || "(no subject)"}</p>
+            <h3 className="font-medium break-words">{row.subject || "(no subject)"}</h3>
             <p className="text-sm text-muted-foreground">
               From {row.fromName || row.fromAddress}
               {row.fromName && row.fromAddress ? ` <${row.fromAddress}>` : ""}

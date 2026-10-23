@@ -72,14 +72,14 @@ export function NavLinks({ inboxCount, variant }: { inboxCount: number; variant:
   };
 
   if (variant === "bar") {
-    return <nav className="flex gap-1 overflow-x-auto px-3 py-2">{GROUPS.flatMap((group) => group.links).map(link)}</nav>;
+    return <nav aria-label="Main" className="flex gap-1 overflow-x-auto px-3 py-2">{GROUPS.flatMap((group) => group.links).map(link)}</nav>;
   }
 
   return (
-    <nav className="flex flex-col gap-6">
+    <nav aria-label="Main" className="flex flex-col gap-6">
       {GROUPS.map((group) => (
         <div key={group.label} className="flex flex-col gap-1">
-          <p className="px-3 pb-1 text-[11px] font-semibold tracking-[0.18em] whitespace-nowrap text-muted-foreground/80 uppercase group-data-[collapsed=true]/sidebar:sr-only">
+          <p className="px-3 pb-1 text-[11px] font-semibold tracking-[0.18em] whitespace-nowrap text-muted-foreground uppercase group-data-[collapsed=true]/sidebar:sr-only">
             {group.label}
           </p>
           {group.links.map(link)}

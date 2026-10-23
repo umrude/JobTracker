@@ -207,7 +207,13 @@ function SkillTable({ skills, insights, total }: { skills: SkillInsight[]; insig
           in each group asked for it.
         </CardDescription>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      {/* Scrolls sideways on phones; focusable so the keyboard can too. */}
+      <CardContent
+        tabIndex={0}
+        role="region"
+        aria-label="Most often missing skills"
+        className="overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b text-left text-xs text-muted-foreground">

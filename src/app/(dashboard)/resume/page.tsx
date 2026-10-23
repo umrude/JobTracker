@@ -72,7 +72,13 @@ export default async function ResumePage() {
                 Upload your .tex to enable tailored resumes.
               </p>
             )}
-            <p className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-md border p-3 font-mono text-xs">
+            {/* Focusable, so the keyboard can scroll it. */}
+            <p
+              tabIndex={0}
+              role="region"
+              aria-label={`Text of resume version ${active.version}`}
+              className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-md border p-3 font-mono text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
               {active.text}
             </p>
           </CardContent>

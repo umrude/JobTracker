@@ -44,6 +44,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-full flex-1">
+      {/* The first thing Tab reaches: jumps past the sidebar and header.
+          Hidden until focused. */}
+      <a
+        href="#content"
+        className="sr-only z-50 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >
+        Skip to content
+      </a>
       <Sidebar initialCollapsed={sidebarCollapsed}>
         <div className="px-5 pt-5 pb-6 group-data-[collapsed=true]/sidebar:px-3.5">
           <Logo nameClassName={COLLAPSED_SR_ONLY} />
@@ -107,13 +115,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <div className="border-b bg-card md:hidden">
+        {/* A labelled section, so everything on the page sits in a landmark. */}
+        <section aria-label="Menu" className="border-b bg-card md:hidden">
           <NavLinks inboxCount={inboxCount} variant="bar" />
           <div className="flex items-center justify-between gap-2 px-4 pb-2 sm:justify-end">
             <ThemeToggle className="sm:hidden" />
             {!publicDemo && <DemoToggle inDemo={mode === "demo"} />}
           </div>
-        </div>
+        </section>
 
         {reconnectGmail && (
           <div role="alert" className="flex items-center justify-between gap-3 border-b border-destructive/40 bg-destructive/5 px-6 py-2 text-sm">
@@ -123,7 +132,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             </Link>
           </div>
         )}
-        <main className="flex flex-1 flex-col">{children}</main>
+        {/* tabIndex -1: the skip link can move focus here. */}
+        <main id="content" tabIndex={-1} className="flex flex-1 flex-col outline-none">
+          {children}
+        </main>
       </div>
     </div>
   );

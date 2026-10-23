@@ -324,7 +324,8 @@ function EntryCard({
   return (
     <Card size="sm">
       <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2">
+        {/* Under "Experience, projects, and education" (h2) and its section (h3). */}
+        <CardTitle as="h4" className="flex flex-wrap items-center gap-2">
           {entryHeadingText(entry)}
           {entry.latexKey === null && <Badge tone="warning">Not on resume</Badge>}
           <SourceBadge source={entry.source} />
@@ -356,10 +357,15 @@ function EntryCard({
           <ul className="space-y-1.5">
             {entry.bullets.map((bullet) => (
               <li key={bullet.id} className="flex items-start justify-between gap-3 text-sm">
-                <span className="flex flex-wrap items-center gap-2">
+                {/* The dot gets its own column, so a long bullet wraps
+                    under its text rather than leaving the dot alone on a line. */}
+                <span className="flex min-w-0 gap-2">
                   <span aria-hidden>•</span>
-                  {bullet.text}
-                  <SourceBadge source={bullet.source} />
+                  <span className="min-w-0">
+                    {bullet.text}
+                    {bullet.source !== "resume" && " "}
+                    <SourceBadge source={bullet.source} />
+                  </span>
                 </span>
                 {!disabled && (
                   <span className="flex shrink-0">

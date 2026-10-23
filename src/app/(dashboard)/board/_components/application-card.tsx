@@ -1,7 +1,7 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { BadgeCheckIcon, CalendarDaysIcon, FileQuestionIcon, PencilIcon } from "lucide-react";
+import { BadgeCheckIcon, CalendarDaysIcon, FileQuestionIcon, GripVerticalIcon, PencilIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { CompanyAvatar } from "@/components/company-avatar";
@@ -9,8 +9,17 @@ import { sinceLabel } from "@/lib/format";
 import type { ApplicationSummary } from "@/server/db/applications";
 import { ApplicationForm } from "./application-form";
 
+// A mouse drags the card from anywhere on it, and touch from a press and
+// hold anywhere on it (the listeners are on the card). The keyboard and
+// screen readers use the grip button, which carries dnd-kit's drag
+// attributes (role, instructions) and is the activator for the keyboard.
+// So the card stays a plain <article>, not a button wrapped around another
+// button (Edit), and it no longer blocks touch scrolling.
 export function ApplicationCard({ application, disabled }: { application: ApplicationSummary; disabled: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: application.id, disabled });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useDraggable({
+    id: application.id,
+    disabled,
+  });
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
 
   return (
@@ -18,17 +27,17 @@ export function ApplicationCard({ application, disabled }: { application: Applic
       ref={setNodeRef}
       style={style}
       {...listeners}
-      {...attributes}
       className={cn(
-        "group touch-none space-y-2.5 rounded-xl bg-muted/60 p-3 text-sm ring-1 ring-transparent transition-[box-shadow,background-color] hover:bg-muted hover:ring-foreground/10 dark:bg-muted/50",
-        !disabled && "cursor-grab active:cursor-grabbing",
+        "group space-y-2.5 rounded-xl bg-muted/60 p-3 text-sm ring-1 ring-transparent transition-[box-shadow,background-color] hover:bg-muted hover:ring-foreground/10 dark:bg-muted/50",
+        // No text selection or callout menu on a press and hold.
+        !disabled && "cursor-grab select-none [-webkit-touch-callout:none] active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >
       {(application.passedScreening || !application.hasListing) && (
         <div className="flex flex-wrap gap-1.5">
           {application.passedScreening && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:text-emerald-300">
               <BadgeCheckIcon className="size-3" />
               Passed screening
             </span>
@@ -52,6 +61,18 @@ export function ApplicationCard({ application, disabled }: { application: Applic
       <div className="flex items-center gap-2">
         <CompanyAvatar name={application.company} />
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">{application.company}</span>
+        {!disabled && (
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            {...attributes}
+            aria-label={`Move ${application.title} at ${application.company}`}
+            title="Drag to move, or press space and use the arrow keys"
+            className="flex size-7 cursor-grab items-center justify-center rounded-md text-muted-foreground opacity-60 outline-none group-hover:opacity-100 hover:bg-background/60 focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 active:cursor-grabbing"
+          >
+            <GripVerticalIcon className="size-4" />
+          </button>
+        )}
         <ApplicationForm
           mode="edit"
           applicationId={application.id}

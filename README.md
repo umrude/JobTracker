@@ -38,6 +38,7 @@ The parts I'd point a reviewer to:
 - **Gmail sync built to be cautious.** Read-only scope, incremental sync with Gmail's history API, a free keyword pre-filter before any model call, and matching that keeps near-identical roles at the same company apart. The refresh token is encrypted with AES-256-GCM, with a key kept outside the database. Email bodies are never stored. The classifier has a 40-case eval set. ([docs/gmail-sync.md](docs/gmail-sync.md))
 - **Every model call returns validated data.** All calls go through one helper that asks for structured output, validates it with Zod, retries once, and then returns an error the UI can show. Results are saved, so reopening a page never re-runs the model.
 - **Measured performance work.** With about 300 applications, the board and inbox were sending megabytes to the browser. The fix was to give Client Components only what they render. The board's navigation payload went from 1.4 MB to 70 KB, and the inbox page from 9.7 MB to 244 KB. ([docs/performance.md](docs/performance.md))
+- **Accessible, and checked on every CI run.** axe-core tests every page against WCAG 2.1 AA in light, dark, and at phone size. The board can be used without a mouse: Space picks a card up, the arrow keys move it a column at a time, and the screen reader announces each move by name. There's also a skip link, real headings, and support for reduced motion. ([docs/accessibility.md](docs/accessibility.md))
 
 ## Architecture
 
@@ -186,7 +187,7 @@ About 490 unit tests run with Vitest, and none of them call the real Anthropic A
 - **Migrations:** checked for the foreign-key rules Drizzle doesn't generate.
 - **Real Tectonic:** one test compiles the demo resume with the real compiler when Tectonic is on your PATH, and is skipped otherwise.
 
-**End-to-end tests** (Playwright, in `e2e/`) drive the demo in a real browser. They cover the board and its filter, read-only mode (including the server refusing a write, and the auth routes returning 404), pre-built PDFs, search, a comparison leading to a tailored resume and its honesty check, the inbox, insights, and the theme and sidebar being remembered across reloads.
+**End-to-end tests** (Playwright, in `e2e/`) drive the demo in a real browser. They cover the board and its filter, read-only mode (including the server refusing a write, and the auth routes returning 404), pre-built PDFs, search, a comparison leading to a tailored resume and its honesty check, the inbox, insights, and the theme and sidebar being remembered across reloads. An accessibility suite runs axe on every page in light, dark, and at phone size, checks that no page scrolls sideways on a phone, and checks the skip link.
 
 **CI** (GitHub Actions) runs on every push and pull request with no real secrets. One job runs the type check, lint, and unit tests. The other seeds the demo, makes a production build, and runs the end-to-end tests against it. On failure, the Playwright report is uploaded as an artifact.
 
@@ -202,3 +203,4 @@ About 490 unit tests run with Vitest, and none of them call the real Anthropic A
 | [search.md](docs/search.md) | Ranking and snippets |
 | [performance.md](docs/performance.md) | What was slow, what changed, and measurements |
 | [design.md](docs/design.md) | Colors, dark mode, layout |
+| [accessibility.md](docs/accessibility.md) | WCAG checks, keyboard dragging, mobile fixes, and known gaps |

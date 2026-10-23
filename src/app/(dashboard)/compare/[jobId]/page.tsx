@@ -185,11 +185,13 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
   );
 }
 
+// 700 shades in light mode: the 600s fall below 4.5:1 on white for the
+// band's label ("Strong fit"), which is normal-size text.
 const TONE_CLASSES: Record<ScoreBand["tone"], string> = {
-  strong: "text-emerald-600 dark:text-emerald-400",
-  solid: "text-sky-600 dark:text-sky-400",
-  stretch: "text-amber-600 dark:text-amber-400",
-  poor: "text-rose-600 dark:text-rose-400",
+  strong: "text-emerald-700 dark:text-emerald-400",
+  solid: "text-sky-700 dark:text-sky-400",
+  stretch: "text-amber-700 dark:text-amber-400",
+  poor: "text-rose-700 dark:text-rose-400",
 };
 
 function ComparisonResult({
@@ -215,10 +217,11 @@ function ComparisonResult({
     <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
       <Card>
         <CardHeader>
-          <CardDescription>Match score for resume v{resumeVersion}</CardDescription>
-          <CardTitle className={cn("text-5xl tabular-nums", TONE_CLASSES[band.tone])}>
+          {/* The heading names the card; the number is its content. */}
+          <CardTitle className="text-sm font-normal text-muted-foreground">Match score for resume v{resumeVersion}</CardTitle>
+          <p className={cn("font-heading text-5xl leading-snug font-medium tabular-nums", TONE_CLASSES[band.tone])}>
             {comparison.score}
-          </CardTitle>
+          </p>
         </CardHeader>
         <CardContent>
           <p className={cn("font-medium", TONE_CLASSES[band.tone])}>{band.label}</p>

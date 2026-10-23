@@ -4,13 +4,17 @@ import { useState, useTransition } from "react";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
+  type Announcements,
   type DragEndEvent,
   type DragStartEvent,
+  type UniqueIdentifier,
 } from "@dnd-kit/core";
-import { STATUSES, type Status } from "@/lib/schemas/status";
+import { STATUSES, STATUS_LABELS, type Status } from "@/lib/schemas/status";
 import type { ApplicationSummary } from "@/server/db/applications";
 import { moveApplicationAction } from "../actions";
 import { FilterIcon } from "lucide-react";
@@ -18,6 +22,16 @@ import { Input } from "@/components/ui/input";
 import { scoreDoc } from "@/lib/search/search";
 import { Column } from "./column";
 import { ApplicationCard } from "./application-card";
+import { columnKeyboardCoordinates } from "./column-keyboard";
+
+// Columns are droppables whose id is their status.
+function isStatus(id: UniqueIdentifier | undefined): id is Status {
+  return typeof id === "string" && (STATUSES as readonly string[]).includes(id);
+}
+
+// Read by screen readers when a card's drag handle is focused.
+const SCREEN_READER_INSTRUCTIONS =
+  "To move this application, press space or enter to pick it up, use the left and right arrow keys to move it between columns, then press space or enter to drop it. Press escape to cancel.";
 
 export function Board({
   initialApplications,
@@ -59,9 +73,29 @@ export function Board({
     setApplications(initialApplications);
   }
 
+  // Mouse: drag from anywhere on a card. Touch: press and hold first, so
+  // a swipe still scrolls the page and the board. Keyboard: from the
+  // card's drag handle, a whole column per arrow key (column-keyboard.ts).
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: columnKeyboardCoordinates }),
   );
+
+  // What screen readers hear while a card moves, in names rather than ids.
+  const describe = (id: UniqueIdentifier) => {
+    const application = applications.find((a) => a.id === Number(id));
+    return application ? `${application.title} at ${application.company}` : "the application";
+  };
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Picked up ${describe(active.id)}.`,
+    onDragOver: ({ over }) => (isStatus(over?.id) ? `Over ${STATUS_LABELS[over.id]}.` : "Not over a column."),
+    onDragEnd: ({ active, over }) =>
+      isStatus(over?.id)
+        ? `Dropped ${describe(active.id)} in ${STATUS_LABELS[over.id]}.`
+        : `Dropped ${describe(active.id)}. It stays where it was.`,
+    onDragCancel: ({ active }) => `Cancelled. ${describe(active.id)} stays where it was.`,
+  };
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(Number(event.active.id));
@@ -72,8 +106,9 @@ export function Board({
     const { active, over } = event;
     if (!over) return;
 
+    if (!isStatus(over.id)) return;
     const applicationId = Number(active.id);
-    const newStatus = over.id as Status;
+    const newStatus = over.id;
     const current = applications.find((a) => a.id === applicationId);
     if (!current || current.status === newStatus) return;
 
@@ -109,6 +144,7 @@ export function Board({
       // A stable id makes that generation deterministic.
       id="application-board"
       sensors={sensors}
+      accessibility={{ announcements, screenReaderInstructions: { draggable: SCREEN_READER_INSTRUCTIONS } }}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
@@ -130,7 +166,17 @@ export function Board({
           </p>
         )}
       </div>
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      {/* Columns are equal height on wide screens (each one a full-height
+          drop target), but size to their own cards on phones, where you
+          swipe between them and the empty height was just blank space. */}
+      {/* Focusable so the keyboard can scroll it sideways even when nothing
+          in it is (the read-only demo has no drag handles). */}
+      <div
+        role="region"
+        aria-label="Application columns"
+        tabIndex={0}
+        className="flex items-start gap-4 overflow-x-auto rounded-2xl pb-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:items-stretch"
+      >
         {STATUSES.map((status) => (
           <Column
             key={status}

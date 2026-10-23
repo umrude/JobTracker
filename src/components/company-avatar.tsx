@@ -2,18 +2,19 @@ import { cn } from "@/lib/utils";
 
 // A company's initials on a color picked from its name, so each company
 // looks the same everywhere it appears (the board, search). Full class
-// names, so Tailwind finds them.
+// names, so Tailwind finds them. Shades dark enough for the small white
+// initials to reach 4.5:1 contrast (the 500s went as low as 2.1:1).
 const COLORS = [
-  "bg-indigo-500",
-  "bg-sky-500",
-  "bg-emerald-500",
-  "bg-amber-500",
-  "bg-rose-500",
-  "bg-violet-500",
-  "bg-teal-500",
-  "bg-orange-500",
-  "bg-fuchsia-500",
-  "bg-cyan-600",
+  "bg-indigo-600",
+  "bg-sky-700",
+  "bg-emerald-700",
+  "bg-amber-700",
+  "bg-rose-700",
+  "bg-violet-600",
+  "bg-teal-700",
+  "bg-orange-700",
+  "bg-fuchsia-700",
+  "bg-cyan-700",
 ];
 
 // A small, stable hash (djb2): the same name always gets the same color.
