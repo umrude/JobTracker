@@ -10,6 +10,7 @@ import type {
 } from "@/lib/schemas/application";
 import { canTransition, type Status } from "@/lib/schemas/status";
 import { nextPassedScreeningAt } from "@/lib/screening";
+import { listStatusHistory, recordCreation, recordStatusChange } from "@/server/db/status-history-store";
 
 // Every query filters on the current user (requireUserId), so an id from
 // a form or a drag-and-drop can only ever reach your own rows: someone
@@ -69,6 +70,13 @@ export async function getApplicationDetails(id: number) {
 
 export type ApplicationDetails = NonNullable<Awaited<ReturnType<typeof getApplicationDetails>>>;
 
+// An application's status history, oldest first (docs/status-history.md).
+// Empty for another user's application, like every read here.
+export async function getStatusHistory(applicationId: number) {
+  const { db, userId } = await scope();
+  return listStatusHistory(db, userId, applicationId);
+}
+
 export async function createApplication(input: CreateApplicationInput) {
   const { db, userId } = await scope();
   return db.transaction((tx) => {
@@ -84,17 +92,20 @@ export async function createApplication(input: CreateApplicationInput) {
       .returning()
       .get();
 
-    return tx
+    const now = new Date();
+    const application = tx
       .insert(applications)
       .values({
         userId,
         jobId: job.id,
         status: input.status,
         notes: input.notes,
-        passedScreeningAt: nextPassedScreeningAt(null, input.status, new Date(), input.passedScreening),
+        passedScreeningAt: nextPassedScreeningAt(null, input.status, now, input.passedScreening),
       })
       .returning()
       .get();
+    recordCreation(tx, userId, { applicationId: application.id, status: input.status, appliedAt: null, at: now, source: "board" });
+    return application;
   });
 }
 
@@ -122,18 +133,22 @@ export async function updateApplication(input: UpdateApplicationInput) {
         .run();
     }
 
+    const now = new Date();
     const applicationUpdates: Partial<typeof applications.$inferInsert> = {
-      updatedAt: new Date(),
+      updatedAt: now,
     };
     if (input.notes !== undefined) applicationUpdates.notes = input.notes;
     if (input.status !== undefined) applicationUpdates.status = input.status;
     applicationUpdates.passedScreeningAt = nextPassedScreeningAt(
       existing.passedScreeningAt,
       input.status ?? existing.status,
-      new Date(),
+      now,
       input.passedScreening,
     );
 
+    if (input.status !== undefined) {
+      recordStatusChange(tx, userId, { applicationId: existing.id, from: existing.status, to: input.status, at: now, source: "board" });
+    }
     return tx
       .update(applications)
       .set(applicationUpdates)
@@ -159,15 +174,17 @@ export async function moveApplicationStatus(id: number, status: Status) {
       throw new Error(`Cannot move application from ${existing.status} to ${status}`);
     }
 
+    const now = new Date();
+    recordStatusChange(tx, userId, { applicationId: existing.id, from: existing.status, to: status, at: now, source: "board" });
     return tx
       .update(applications)
       .set({
         status,
-        updatedAt: new Date(),
-        passedScreeningAt: nextPassedScreeningAt(existing.passedScreeningAt, status, new Date()),
+        updatedAt: now,
+        passedScreeningAt: nextPassedScreeningAt(existing.passedScreeningAt, status, now),
         appliedAt:
           status === "applied" && !existing.appliedAt
-            ? new Date()
+            ? now
             : existing.appliedAt,
       })
       .where(and(eq(applications.id, id), eq(applications.userId, userId)))

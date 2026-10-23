@@ -42,6 +42,7 @@ const profileDal = await import("@/server/db/profile");
 const gmailDal = await import("@/server/db/gmail-connections");
 const emailEventsDal = await import("@/server/db/email-events");
 const { insertEmailEvent } = await import("@/server/db/email-event-store");
+const { backfillStatusHistory } = await import("@/server/db/status-history-store");
 
 const DEMO_TEX = fs.readFileSync(
   path.join(process.cwd(), "src/server/db/fixtures/demo-resume.tex"),
@@ -729,5 +730,88 @@ describe("search", () => {
     ]);
     expect(results[1].snippet?.match).toBe("Kubernetes");
     expect(Object.keys(results[1])).not.toContain("listing");
+  });
+});
+
+describe("status history", () => {
+  const steps = (rows: { from: string | null; to: string; source: string }[]) => rows.map((r) => `${r.from ?? "new"}>${r.to}:${r.source}`);
+
+  it("records every board change for its owner, and only shows it to them", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied" });
+    await applicationsDal.moveApplicationStatus(app.id, "acknowledged");
+    await applicationsDal.updateApplication({ id: app.id, status: "interviewing" });
+    // Saving without changing the status records nothing.
+    await applicationsDal.updateApplication({ id: app.id, status: "interviewing", notes: "Call on Friday" });
+    expect(steps(await applicationsDal.getStatusHistory(app.id))).toEqual([
+      "new>applied:board",
+      "applied>acknowledged:board",
+      "acknowledged>interviewing:board",
+    ]);
+
+    as(BOB);
+    expect(await applicationsDal.getStatusHistory(app.id)).toEqual([]);
+    // Bob's failed attempts to move it record nothing either.
+    await expect(applicationsDal.moveApplicationStatus(app.id, "offer")).rejects.toThrow();
+    as(ALICE);
+    expect(await applicationsDal.getStatusHistory(app.id)).toHaveLength(3);
+    expect(testDb.select().from(schema.statusEvents).all().every((row) => row.userId === ALICE)).toBe(true);
+  });
+
+  it("starts a saved job's history when it moves to Applied", async () => {
+    as(ALICE);
+    const job = await jobsDal.createSavedJob({ company: "Acme", title: "Engineer" });
+    const moved = await jobsDal.moveSavedJobToApplied(job.id, new Date());
+    if (!moved.ok) throw new Error("move failed");
+    expect(steps(await applicationsDal.getStatusHistory(moved.applicationId))).toEqual(["new>applied:board"]);
+  });
+
+  it("dates a confirmed email by the email, and links it", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied" });
+    const received = new Date(Date.UTC(2026, 8, 1));
+    insertEmailEvent(testDb, ALICE, {
+      source: "email",
+      gmailMessageId: "m1",
+      subject: "Interview invitation",
+      fromName: "Acme Recruiting",
+      receivedAt: received,
+      applicationId: app.id,
+      emailType: "interview",
+      confidence: 0.9,
+    });
+    const [suggestion] = await emailEventsDal.listPendingSuggestions();
+    expect((await emailEventsDal.confirm(suggestion.id)).ok).toBe(true);
+    const last = (await applicationsDal.getStatusHistory(app.id)).at(-1);
+    expect(last).toMatchObject({
+      from: "applied",
+      to: "interviewing",
+      source: "email",
+      at: received,
+      emailSubject: "Interview invitation",
+      emailFrom: "Acme Recruiting",
+    });
+  });
+
+  it("deletes an application's history with it", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied" });
+    await applicationsDal.deleteApplication(app.id);
+    expect(testDb.select().from(schema.statusEvents).all()).toEqual([]);
+  });
+
+  it("backfills one user's old applications without touching the other's, and only once", () => {
+    for (const userId of [ALICE, BOB]) {
+      const job = testDb.insert(schema.jobs).values({ userId, company: "Old Co", title: "Dev" }).returning().get();
+      // Inserted directly, as applications from before history was kept.
+      testDb.insert(schema.applications).values({ userId, jobId: job.id, status: "rejected" }).run();
+    }
+    expect(backfillStatusHistory(testDb, ALICE)).toBe(1);
+    expect(backfillStatusHistory(testDb, ALICE)).toBe(0);
+    const rows = testDb.select().from(schema.statusEvents).all();
+    expect(rows.map((r) => [r.userId, r.fromStatus, r.toStatus, r.source])).toEqual([
+      [ALICE, null, "applied", "estimated"],
+      [ALICE, "applied", "rejected", "estimated"],
+    ]);
   });
 });

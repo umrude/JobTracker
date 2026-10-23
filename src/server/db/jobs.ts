@@ -5,6 +5,7 @@ import { getMode } from "@/server/mode";
 import { requireUserId } from "@/server/current-user";
 import { applications, jobs } from "@/server/db/schema";
 import { toApplication } from "@/lib/saved-job";
+import { recordCreation } from "@/server/db/status-history-store";
 import type {
   CreateSavedJobInput,
   UpdateSavedJobInput,
@@ -127,6 +128,13 @@ export async function moveSavedJobToApplied(
       .values({ ...result.application, userId })
       .returning()
       .get();
+    recordCreation(tx, userId, {
+      applicationId: application.id,
+      status: application.status,
+      appliedAt: application.appliedAt,
+      at: now,
+      source: "board",
+    });
     tx.update(jobs)
       .set({ notes: null })
       .where(and(eq(jobs.id, id), eq(jobs.userId, userId)))

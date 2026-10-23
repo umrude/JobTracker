@@ -19,6 +19,7 @@ import { seedDemoDatabase } from "@/server/db/seed";
 import { DEMO_USER_EMAIL } from "@/server/db/paths";
 import { insertComparisonWithSkills } from "@/server/db/comparison-store";
 import { insertEmailEvent } from "@/server/db/email-event-store";
+import { backfillStatusHistory } from "@/server/db/status-history-store";
 import { comparisonSchema } from "@/lib/schemas/comparison";
 import type { Status } from "@/lib/schemas/status";
 
@@ -141,6 +142,9 @@ async function main() {
       reason: "Generated for performance testing.",
     });
   }
+
+  // Status history for the generated applications, as the seed does.
+  backfillStatusHistory(db, user.id);
 
   sqlite.close();
   console.log(`Wrote ${PERF_DB_PATH}: the demo plus ${COUNT} applications and 150 Inbox suggestions.`);

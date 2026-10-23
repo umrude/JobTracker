@@ -21,6 +21,7 @@ import {
 } from "@/lib/schemas/profile";
 import { COVER_LENGTHS, COVER_TONES } from "@/lib/schemas/cover-letter";
 import { EMAIL_TYPES, MATCH_METHODS, SUGGESTION_SOURCES, SUGGESTION_STATES } from "@/lib/schemas/email";
+import { STATUS_CHANGE_SOURCES } from "@/lib/schemas/status-history";
 
 // Accounts. The app is multi-user *ready*: every other table has a
 // user_id and every query filters by it, but sign-in is still limited to
@@ -325,6 +326,35 @@ export const emailEvents = sqliteTable(
     uniqueIndex("email_events_user_message_unique").on(table.userId, table.gmailMessageId),
     index("email_events_user_state_idx").on(table.userId, table.state),
   ],
+);
+
+// Every status an application has had, and when: one row per change, so
+// the history can be shown as a timeline and counted (time in each stage,
+// how far applications get). Written by every code path that changes a
+// status, in the same transaction. See docs/status-history.md.
+export const statusEvents = sqliteTable(
+  "status_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: ownerColumn(),
+    applicationId: integer("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    // Null when the application was created at `to_status`.
+    fromStatus: text("from_status", { enum: STATUSES }),
+    toStatus: text("to_status", { enum: STATUSES }).notNull(),
+    // When it happened. For a confirmed email, the email's date, not when
+    // you confirmed it.
+    at: integer("at", { mode: "timestamp" }).notNull(),
+    source: text("source", { enum: STATUS_CHANGE_SOURCES }).notNull(),
+    // The email suggestion that caused it, if any. Kept if the suggestion
+    // is ever deleted, just without the link.
+    emailEventId: integer("email_event_id").references(() => emailEvents.id, { onDelete: "set null" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [index("status_events_user_application_idx").on(table.userId, table.applicationId, table.at)],
 );
 
 // A user's Gmail connection (gmail.readonly), at most one per user. Only

@@ -37,6 +37,7 @@ import { earliestAppliedAt } from "@/server/db/gmail-store";
 import { demoMailSource } from "@/server/gmail/demo-source";
 import { syncInbox } from "@/server/gmail/sync";
 import { demoClassification, DEMO_CLASSIFIER_MODEL } from "@/server/llm/classify-demo";
+import { backfillStatusHistory } from "@/server/db/status-history-store";
 
 const UNCOMPARED_SEED_JOB_URL = "https://pebblebrookhealth.example/careers/4410";
 // Gets a tailored resume draft in the seed, so the read-only public demo
@@ -775,6 +776,11 @@ export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<n
     position: { historyId: null, since: defaultSyncStart(earliestAppliedAt(db, demoUser.id), now) },
     now,
   });
+
+  // Status history for the seeded applications, inserted directly above:
+  // the same reconstruction the backfill gives real data that predates
+  // history (docs/status-history.md).
+  backfillStatusHistory(db, demoUser.id);
 
   sqlite.close();
   return SEED_SAVED_JOBS.length + SEED_APPLICATIONS.length;

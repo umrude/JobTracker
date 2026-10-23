@@ -10,6 +10,7 @@ import { proposeForSavedJob, proposeStatus } from "@/lib/email/propose";
 import type { GhostedInput } from "@/lib/email/ghosted";
 import type { Status } from "@/lib/schemas/status";
 import { nextPassedScreeningAt } from "@/lib/screening";
+import { recordCreation, recordStatusChange } from "@/server/db/status-history-store";
 import type { EmailType } from "@/lib/schemas/email";
 
 type AppDb = BetterSQLite3Database<typeof schema>;
@@ -253,6 +254,10 @@ export function confirmSuggestion(db: AppDb, userId: number, id: number, now = n
       .get();
     if (!event) return { ok: false, message: "That suggestion isn't waiting for review any more." };
 
+    // The history records when it happened: the email's date, not today's
+    // review. The ghosted rule has no email, so it's dated by confirming.
+    const happenedAt = event.receivedAt ?? now;
+
     const markConfirmed = (applicationId: number, status: Status) =>
       // Records what was actually applied, for "Recently reviewed".
       tx.update(emailEvents)
@@ -299,6 +304,14 @@ export function confirmSuggestion(db: AppDb, userId: number, id: number, now = n
           .returning({ id: applications.id })
           .get();
         tx.update(jobs).set({ notes: null }).where(and(eq(jobs.id, job.id), eq(jobs.userId, userId))).run();
+        recordCreation(tx, userId, {
+          applicationId: created.id,
+          status,
+          appliedAt: happenedAt,
+          at: happenedAt,
+          source: event.source,
+          emailEventId: event.id,
+        });
         markConfirmed(created.id, status);
         return { ok: true, status };
       }
@@ -319,6 +332,14 @@ export function confirmSuggestion(db: AppDb, userId: number, id: number, now = n
       .set({ status, updatedAt: now, passedScreeningAt: nextPassedScreeningAt(app.passedScreeningAt, status, now) })
       .where(and(eq(applications.id, applicationId), eq(applications.userId, userId)))
       .run();
+    recordStatusChange(tx, userId, {
+      applicationId,
+      from: app.status,
+      to: status,
+      at: happenedAt,
+      source: event.source,
+      emailEventId: event.id,
+    });
     markConfirmed(applicationId, status);
     return { ok: true, status };
   });
@@ -391,7 +412,12 @@ export function addApplicationFromSuggestion(
 ): DecideResult {
   return db.transaction((tx) => {
     const event = tx
-      .select({ source: emailEvents.source, applicationId: emailEvents.applicationId, jobId: emailEvents.jobId })
+      .select({
+        source: emailEvents.source,
+        applicationId: emailEvents.applicationId,
+        jobId: emailEvents.jobId,
+        receivedAt: emailEvents.receivedAt,
+      })
       .from(emailEvents)
       .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId), eq(emailEvents.state, "pending")))
       .get();
@@ -425,6 +451,15 @@ export function addApplicationFromSuggestion(
       })
       .returning({ id: applications.id })
       .get();
+    // Applied on the date you entered; at the email's status on its date.
+    recordCreation(tx, userId, {
+      applicationId: app.id,
+      status: input.status,
+      appliedAt: input.appliedAt,
+      at: event.receivedAt ?? now,
+      source: "email",
+      emailEventId: id,
+    });
     tx.update(emailEvents)
       .set({ applicationId: app.id, matchMethod: "manual", state: "confirmed", proposedStatus: input.status, decidedAt: now })
       .where(and(eq(emailEvents.id, id), eq(emailEvents.userId, userId)))

@@ -171,6 +171,7 @@ CI runs the end-to-end tests against this exact build. To check the deployed dem
 | `pnpm typecheck` / `pnpm lint` / `pnpm test` | Type check, lint, unit tests |
 | `pnpm test:e2e` | End-to-end tests against the demo (starts its own server on port 3100) |
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / rebuild the demo database (the server also does this when it starts) |
+| `pnpm db:backfill-history` | Once, after upgrading to status history: reconstructs it for older applications ([status history](docs/status-history.md)) |
 | `pnpm demo:pdfs` | Rebuild the demo's pre-built PDFs (needs Tectonic) |
 | `pnpm eval:classifier` | Run the email classifier on its eval set (real API calls, a few cents) |
 | `pnpm perf:seed` / `pnpm perf:measure` | Build a large database and time each page ([performance](docs/performance.md)) |
@@ -198,6 +199,7 @@ About 490 unit tests run with Vitest, and none of them call the real Anthropic A
 | [tailored-resumes.md](docs/tailored-resumes.md) | Profile, skill aliases, comparison gaps, tailoring, honesty checks, LaTeX and PDFs |
 | [cover-letters.md](docs/cover-letters.md) | Cover letter options, versions, and honesty warnings |
 | [gmail-sync.md](docs/gmail-sync.md) | OAuth, token storage, sync, pre-filter, matching, classifier and its eval |
+| [status-history.md](docs/status-history.md) | Every status change and when, how older applications are reconstructed |
 | [insights.md](docs/insights.md) | What's counted, outcome groups, small samples |
 | [multi-user.md](docs/multi-user.md) | Ownership design and what opening sign-up would take |
 | [search.md](docs/search.md) | Ranking and snippets |
