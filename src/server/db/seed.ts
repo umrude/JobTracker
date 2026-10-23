@@ -37,7 +37,9 @@ import { earliestAppliedAt } from "@/server/db/gmail-store";
 import { demoMailSource } from "@/server/gmail/demo-source";
 import { syncInbox } from "@/server/gmail/sync";
 import { demoClassification, DEMO_CLASSIFIER_MODEL } from "@/server/llm/classify-demo";
-import { backfillStatusHistory } from "@/server/db/status-history-store";
+import { backfillStatusHistory, recordCreation, recordStatusChange } from "@/server/db/status-history-store";
+import type { EmailType } from "@/lib/schemas/email";
+import { GHOSTED_AFTER_DAYS } from "@/lib/email/ghosted";
 
 const UNCOMPARED_SEED_JOB_URL = "https://pebblebrookhealth.example/careers/4410";
 // Gets a tailored resume draft in the seed, so the read-only public demo
@@ -85,7 +87,19 @@ type SeedApplication = SeedJob & {
   // (set from the applied date when not given); a rejection after an
   // interview, like Ironclad's, says so explicitly.
   passedScreeningDaysAgo?: number;
+  // How it got to `status` after applying, for its page's timeline
+  // (docs/status-history.md). Without one, the history is reconstructed
+  // like any older application's. The last step must reach `status`.
+  history?: SeedStep[];
 };
+
+// One step in a seeded application's history. An email step also seeds the
+// confirmed email that caused it, so the page can show it.
+type SeedStep = { to: Status; daysAgo: number } & (
+  | { via: "board" }
+  | { via: "ghosted" }
+  | { via: "email"; emailType: EmailType; subject: string; fromName: string; fromAddress: string; snippet: string }
+);
 
 // A fake resume for a fictional person; never put real resume text here.
 // It's a frontend engineer on purpose: a strong fit for Northwind, a
@@ -314,6 +328,18 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     status: "acknowledged",
     appliedDaysAgo: 19,
     notes: "Got an auto-reply confirming receipt.",
+    history: [
+      {
+        to: "acknowledged",
+        daysAgo: 18,
+        via: "email",
+        emailType: "acknowledged",
+        subject: "We received your application",
+        fromName: "Driftwood Analytics Talent",
+        fromAddress: "talent@driftwood.example",
+        snippet: "Thanks for applying for Full-Stack Developer. We review every application and will be in touch within two weeks.",
+      },
+    ],
   },
   {
     company: "Larkspur Systems",
@@ -338,6 +364,20 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     status: "interviewing",
     appliedDaysAgo: 15,
     notes: "Phone screen went well, onsite loop pending.",
+    history: [
+      {
+        to: "acknowledged",
+        daysAgo: 14,
+        via: "email",
+        emailType: "acknowledged",
+        subject: "Application received: QA Automation Engineer",
+        fromName: "Marrow Biotech Careers",
+        fromAddress: "careers@marrowbio.example",
+        snippet: "Hi Alex, we've received your application and our team is reviewing it.",
+      },
+      // After a recruiter call.
+      { to: "interviewing", daysAgo: 9, via: "board" },
+    ],
   },
   {
     company: "Solstice Interactive",
@@ -349,6 +389,18 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     status: "interviewing",
     appliedDaysAgo: 13,
     notes: "Take-home exercise submitted, awaiting feedback.",
+    history: [
+      {
+        to: "interviewing",
+        daysAgo: 9,
+        via: "email",
+        emailType: "interview",
+        subject: "Interview: Mobile Engineer (iOS)",
+        fromName: "Dana Kim",
+        fromAddress: "dana.kim@solstice.example",
+        snippet: "We'd like to invite you to a technical interview with the iOS team. Here are a few times that work for us.",
+      },
+    ],
   },
   {
     company: "Hearthstone Logistics",
@@ -361,6 +413,30 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     status: "offer",
     appliedDaysAgo: 38,
     notes: "Verbal offer received, waiting on written details.",
+    history: [
+      {
+        to: "acknowledged",
+        daysAgo: 37,
+        via: "email",
+        emailType: "acknowledged",
+        subject: "Thanks for applying to Hearthstone Logistics",
+        fromName: "Hearthstone Recruiting",
+        fromAddress: "no-reply@hearthstone.example",
+        snippet: "We've received your application for Site Reliability Engineer.",
+      },
+      {
+        to: "interviewing",
+        daysAgo: 30,
+        via: "email",
+        emailType: "interview",
+        subject: "Interview availability: Site Reliability Engineer",
+        fromName: "Priya Natarajan",
+        fromAddress: "priya@hearthstone.example",
+        snippet: "Could you share your availability for a first conversation with the reliability team next week?",
+      },
+      // A verbal offer on a call, before the letter (in the Inbox) arrived.
+      { to: "offer", daysAgo: 6, via: "board" },
+    ],
   },
   {
     company: "Ironclad Ledger",
@@ -374,6 +450,30 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     appliedDaysAgo: 43,
     passedScreeningDaysAgo: 38,
     notes: "Passed after the final round; team went with an internal candidate.",
+    history: [
+      {
+        to: "acknowledged",
+        daysAgo: 42,
+        via: "email",
+        emailType: "acknowledged",
+        subject: "Your application for Engineering Manager",
+        fromName: "Ironclad Ledger Talent",
+        fromAddress: "talent@ironclad.example",
+        snippet: "Thank you for your interest in Ironclad Ledger. Our team will review your application.",
+      },
+      {
+        to: "interviewing",
+        daysAgo: 38,
+        via: "email",
+        emailType: "interview",
+        subject: "Next steps: Engineering Manager interviews",
+        fromName: "Marcus Hale",
+        fromAddress: "marcus.hale@ironclad.example",
+        snippet: "We enjoyed reading about your team leadership. Let's set up a call with the hiring manager.",
+      },
+      // Told on the final call; the written rejection is in the Inbox.
+      { to: "rejected", daysAgo: 32, via: "board" },
+    ],
   },
   {
     company: "Violet Meridian",
@@ -385,6 +485,18 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     status: "rejected",
     appliedDaysAgo: 48,
     notes: "Declined; role was paused due to a hiring freeze.",
+    history: [
+      {
+        to: "rejected",
+        daysAgo: 33,
+        via: "email",
+        emailType: "rejection",
+        subject: "Technical Writer application",
+        fromName: "Violet Meridian Hiring",
+        fromAddress: "hiring@violetmeridian.example",
+        snippet: "Thank you for applying. After careful review, we've decided to move forward with other candidates.",
+      },
+    ],
   },
   {
     company: "Quantum Loom",
@@ -396,6 +508,9 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
     status: "ghosted",
     appliedDaysAgo: 58,
     notes: "No response since the first recruiter call six weeks ago.",
+    history: [
+      { to: "ghosted", daysAgo: 27, via: "ghosted" },
+    ],
   },
 ];
 
@@ -598,6 +713,63 @@ function seedTailoring(
 // The Insights page's history (seed-history.ts): each application, and for
 // those with a listing, a comparison through the same function as the app,
 // so its skill rows are written exactly as a real comparison's would be.
+// A showcase application's written history: applied on its applied date,
+// then each step. An email step also stores the confirmed email behind it
+// (metadata and snippet, as the real sync would), so the application's
+// page lists it and the timeline names it.
+function seedApplicationHistory(db: ProfileDb, userId: number, applicationId: number, seedApp: SeedApplication) {
+  const steps = seedApp.history ?? [];
+  if (steps.at(-1)?.to !== seedApp.status) {
+    throw new Error(`${seedApp.company}'s seeded history doesn't end at its status (${seedApp.status}).`);
+  }
+  const applied = daysAgo(seedApp.appliedDaysAgo ?? seedApp.savedDaysAgo);
+  recordCreation(db, userId, { applicationId, status: "applied", appliedAt: applied, at: applied, source: "board" });
+
+  let current: Status = "applied";
+  steps.forEach((step, i) => {
+    const at = daysAgo(step.daysAgo);
+    let emailEventId: number | null = null;
+    if (step.via !== "board") {
+      emailEventId = db
+        .insert(schema.emailEvents)
+        .values({
+          userId,
+          applicationId,
+          state: "confirmed",
+          proposedStatus: step.to,
+          decidedAt: at,
+          ...(step.via === "email"
+            ? {
+                source: "email" as const,
+                gmailMessageId: `seed-history-${applicationId}-${i}`,
+                gmailThreadId: `seed-history-${applicationId}`,
+                subject: step.subject,
+                fromName: step.fromName,
+                fromAddress: step.fromAddress,
+                snippet: step.snippet,
+                receivedAt: at,
+                matchMethod: "company" as const,
+                emailType: step.emailType,
+                confidence: 0.95,
+                model: DEMO_CLASSIFIER_MODEL,
+              }
+            : { source: "ghosted" as const, reason: `No reply and no change for ${GHOSTED_AFTER_DAYS} days.` }),
+        })
+        .returning({ id: schema.emailEvents.id })
+        .get().id;
+    }
+    recordStatusChange(db, userId, {
+      applicationId,
+      from: current,
+      to: step.to,
+      at,
+      source: step.via,
+      emailEventId,
+    });
+    current = step.to;
+  });
+}
+
 function seedHistory(db: ProfileDb, userId: number, resumeId: number) {
   for (const app of SEED_HISTORY) {
     const listingText = historyListing(app);
@@ -724,6 +896,7 @@ export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<n
     }
   }
 
+  const withHistory: { seedApp: SeedApplication; applicationId: number }[] = [];
   for (const seedApp of SEED_APPLICATIONS) {
     const job = db
       .insert(schema.jobs)
@@ -739,7 +912,8 @@ export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<n
       .returning()
       .get();
 
-    db.insert(schema.applications)
+    const application = db
+      .insert(schema.applications)
       .values({
         userId: demoUser.id,
         jobId: job.id,
@@ -758,7 +932,9 @@ export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<n
               : null,
         notes: seedApp.notes,
       })
-      .run();
+      .returning({ id: schema.applications.id })
+      .get();
+    if (seedApp.history) withHistory.push({ seedApp, applicationId: application.id });
   }
 
   // Older applications with comparisons, for the Insights page.
@@ -777,9 +953,13 @@ export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<n
     now,
   });
 
-  // Status history for the seeded applications, inserted directly above:
-  // the same reconstruction the backfill gives real data that predates
+  // Written histories for the showcase applications, after the sync so the
+  // demo Inbox's pending suggestions come out exactly as before. The rest
+  // get the same reconstruction the backfill gives real data that predates
   // history (docs/status-history.md).
+  for (const { seedApp, applicationId } of withHistory) {
+    seedApplicationHistory(db, demoUser.id, applicationId, seedApp);
+  }
   backfillStatusHistory(db, demoUser.id);
 
   sqlite.close();

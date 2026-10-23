@@ -230,6 +230,33 @@ export function recentlyDecidedRows(db: AppDb, userId: number, limit = 10) {
     .all();
 }
 
+// The emails about one application, newest first, for its page: every
+// suggestion linked to it, whatever you decided. Metadata and Gmail's
+// snippet only, like everywhere else (bodies are never stored). Ghosted-
+// rule suggestions aren't emails, so they're left out; the timeline shows
+// them.
+export function emailsForApplication(db: AppDb, userId: number, applicationId: number) {
+  return db
+    .select({
+      id: emailEvents.id,
+      subject: emailEvents.subject,
+      fromName: emailEvents.fromName,
+      fromAddress: emailEvents.fromAddress,
+      snippet: emailEvents.snippet,
+      receivedAt: emailEvents.receivedAt,
+      emailType: emailEvents.emailType,
+      state: emailEvents.state,
+    })
+    .from(emailEvents)
+    .where(
+      and(eq(emailEvents.userId, userId), eq(emailEvents.applicationId, applicationId), eq(emailEvents.source, "email")),
+    )
+    .orderBy(desc(sql`coalesce(${emailEvents.receivedAt}, ${emailEvents.createdAt})`), desc(emailEvents.id))
+    .all();
+}
+
+export type ApplicationEmail = ReturnType<typeof emailsForApplication>[number];
+
 export function pendingSuggestionCount(db: AppDb, userId: number): number {
   return (
     db

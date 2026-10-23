@@ -13,6 +13,7 @@ Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It r
 ## What it does
 
 - **Board.** Applications by status (Applied, Acknowledged, Interviewing, Offer, Rejected, Ghosted), with drag and drop, search, and a filter.
+- **Application pages.** Each application's history: every status it's had, when, and what moved it (a drag, a confirmed email, the ghosted rule). Its page also lists the emails about it, and links to its comparison and tailored resume.
 - **Saved jobs.** Paste a listing to apply to later, then move it to the board when you apply.
 - **Resume comparison.** Scores your resume against a listing and lists matched skills, gaps, and missing keywords. When a gap is something you do have, "I have this" adds it to your profile.
 - **Tailored resumes.** The model picks, orders, and lightly rewords content from your profile for one listing. Code checks the result, you review every change, and the approved version is compiled from your LaTeX source to a one-page PDF.
@@ -25,8 +26,10 @@ Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It r
 | ![A comparison: match score, skills you have, gaps, and missing keywords](docs/screenshots/comparison.png) | ![Reviewing a tailored resume change by change, with a change the honesty check reverted](docs/screenshots/tailored-resume.png) |
 | **Inbox review** | **Insights** |
 | ![Suggestions from email, each waiting for confirmation](docs/screenshots/inbox.png) | ![Skill gaps across listings, with outcome counts](docs/screenshots/insights.png) |
-| **Board** | **Dark mode** |
-| ![The board, with applications grouped by status](docs/screenshots/board.png) | ![The board in dark mode](docs/screenshots/board-dark.png) |
+| **Application page** | **Board** |
+| ![An application's page: its status history as a timeline, and the emails about it](docs/screenshots/application.png) | ![The board, with applications grouped by status](docs/screenshots/board.png) |
+| **Dark mode** | |
+| ![The board in dark mode](docs/screenshots/board-dark.png) | |
 
 ## Highlights
 
@@ -199,7 +202,7 @@ About 490 unit tests run with Vitest, and none of them call the real Anthropic A
 | [tailored-resumes.md](docs/tailored-resumes.md) | Profile, skill aliases, comparison gaps, tailoring, honesty checks, LaTeX and PDFs |
 | [cover-letters.md](docs/cover-letters.md) | Cover letter options, versions, and honesty warnings |
 | [gmail-sync.md](docs/gmail-sync.md) | OAuth, token storage, sync, pre-filter, matching, classifier and its eval |
-| [status-history.md](docs/status-history.md) | Every status change and when, how older applications are reconstructed |
+| [status-history.md](docs/status-history.md) | Every status change and when, how older applications are reconstructed, and the application page |
 | [insights.md](docs/insights.md) | What's counted, outcome groups, small samples |
 | [multi-user.md](docs/multi-user.md) | Ownership design and what opening sign-up would take |
 | [search.md](docs/search.md) | Ranking and snippets |

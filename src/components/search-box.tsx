@@ -67,7 +67,10 @@ export function SearchBox() {
     };
   }, [query]);
 
-  const href = (result: SearchResult) => `/compare/${result.jobId}`;
+  // An application opens its own page (history, emails); a saved job, its
+  // comparison, the most useful page for a job you haven't applied to.
+  const href = (result: SearchResult) =>
+    result.applicationId !== null ? `/applications/${result.applicationId}` : `/compare/${result.jobId}`;
   function go(path: string) {
     setOpen(false);
     inputRef.current?.blur();

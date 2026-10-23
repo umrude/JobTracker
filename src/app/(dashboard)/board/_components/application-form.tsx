@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ReactElement } from "react";
+import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -41,10 +42,14 @@ type ApplicationFormProps =
       // is loaded when the dialog opens. See docs/performance.md.
       applicationId: number;
       company: string;
+      // Where to go after deleting it, when the dialog was opened from a
+      // page about this application (which no longer exists afterwards).
+      afterDelete?: string;
     };
 
 export function ApplicationForm(props: ApplicationFormProps) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [details, setDetails] = useState<ApplicationDetails | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -87,6 +92,7 @@ export function ApplicationForm(props: ApplicationFormProps) {
     startTransition(async () => {
       await deleteApplicationAction(formData);
       setOpen(false);
+      if (props.mode === "edit" && props.afterDelete) router.push(props.afterDelete);
     });
   }
 

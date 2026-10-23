@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowRightIcon, ExternalLinkIcon } from "lucide-react";
 import { EMAIL_TYPE_LABELS, STATUS_FOR_EMAIL_TYPE, type MatchMethod } from "@/lib/schemas/email";
 import { STATUS_LABELS } from "@/lib/schemas/status";
@@ -70,7 +71,17 @@ export function SuggestionCard({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
           {linked ? (
             <span>
-              {row.company} · {row.title}
+              {onBoard && row.applicationId !== null ? (
+                // Its page: the history and every email about it, to check
+                // before confirming.
+                <Link href={`/applications/${row.applicationId}`} className="underline-offset-4 hover:underline">
+                  {row.company} · {row.title}
+                </Link>
+              ) : (
+                <>
+                  {row.company} · {row.title}
+                </>
+              )}
               <span className="text-muted-foreground">
                 {savedJob ? " (saved job, not on the board yet)" : from ? ` (now ${from})` : ""}
               </span>

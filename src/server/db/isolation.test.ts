@@ -815,3 +815,37 @@ describe("status history", () => {
     ]);
   });
 });
+
+describe("an application's emails", () => {
+  it("lists the emails about your application, and nobody else's", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied" });
+    insertEmailEvent(testDb, ALICE, {
+      source: "email",
+      gmailMessageId: "a1",
+      subject: "Thanks for applying",
+      receivedAt: new Date(Date.UTC(2026, 8, 1)),
+      applicationId: app.id,
+    });
+    insertEmailEvent(testDb, ALICE, {
+      source: "email",
+      gmailMessageId: "a2",
+      subject: "Interview invitation",
+      receivedAt: new Date(Date.UTC(2026, 8, 9)),
+      applicationId: app.id,
+    });
+    // The ghosted rule isn't an email: the timeline shows it, not this list.
+    insertEmailEvent(testDb, ALICE, { source: "ghosted", applicationId: app.id });
+    expect((await emailEventsDal.listEmailsForApplication(app.id)).map((e) => e.subject)).toEqual([
+      "Interview invitation",
+      "Thanks for applying",
+    ]);
+
+    as(BOB);
+    expect(await emailEventsDal.listEmailsForApplication(app.id)).toEqual([]);
+    // A row of Bob's naming Alice's application id never shows up in her list.
+    insertEmailEvent(testDb, BOB, { source: "email", gmailMessageId: "b1", subject: "Bob's", applicationId: app.id });
+    as(ALICE);
+    expect(await emailEventsDal.listEmailsForApplication(app.id)).toHaveLength(2);
+  });
+});

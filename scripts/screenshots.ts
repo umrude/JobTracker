@@ -47,6 +47,7 @@ async function main() {
               { name: "tailored-resume", route: `/apply/${await showcaseJobId(page)}` },
               { name: "inbox", route: "/inbox-review" },
               { name: "insights", route: "/insights" },
+              { name: "application", route: "/applications/7" },
             ];
       for (const { name, route } of shots) {
         await open(page, route);

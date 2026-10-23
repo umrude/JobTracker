@@ -1,4 +1,6 @@
-import type { Status } from "@/lib/schemas/status";
+import { STATUS_LABELS, type Status } from "@/lib/schemas/status";
+import { GHOSTED_AFTER_DAYS } from "@/lib/email/ghosted";
+import { plural } from "@/lib/format";
 import type { StatusChange, StatusChangeSource } from "@/lib/schemas/status-history";
 
 // Pure rules for an application's status history: what a new application's
@@ -72,4 +74,38 @@ export function reconstructHistory(application: {
     changes.push({ from: current, to: application.status, at, source: "estimated", emailEventId: null });
   }
   return changes;
+}
+
+// ---- Wording for the timeline (the application page) ----
+
+// The step itself: "Applied", "Added at Interviewing", "Moved to Offer".
+export function stepTitle(from: Status | null, to: Status): string {
+  if (from === null) return to === "applied" ? "Applied" : `Added at ${STATUS_LABELS[to]}`;
+  return `Moved to ${STATUS_LABELS[to]}`;
+}
+
+// Where the step came from, in a line.
+export function stepOrigin(step: { source: StatusChangeSource; emailSubject: string | null; emailFrom: string | null }): string {
+  switch (step.source) {
+    case "board":
+      return "On the board";
+    case "email":
+      if (!step.emailSubject) return "From an email";
+      return `From an email: “${step.emailSubject}”${step.emailFrom ? `, ${step.emailFrom}` : ""}`;
+    case "ghosted":
+      return `Ghosted rule: no reply in ${GHOSTED_AFTER_DAYS} days, confirmed by you`;
+    case "estimated":
+      return "Date estimated: from before history was kept";
+  }
+}
+
+const DAY = 24 * 60 * 60 * 1000;
+
+// "12 days later", counted from the step before. Nothing for the first
+// step, the same day, or a step dated before the one it follows (an old
+// email confirmed late; see listStatusHistory).
+export function stepGap(previous: Date | undefined, at: Date): string | null {
+  if (!previous) return null;
+  const days = Math.floor((at.getTime() - previous.getTime()) / DAY);
+  return days >= 1 ? `${plural(days, "day")} later` : null;
 }

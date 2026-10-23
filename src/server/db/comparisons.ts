@@ -25,6 +25,7 @@ export async function getJobForComparison(id: number) {
       // status, or "Move to Applied" while it's still a saved job. The join
       // is scoped to you too, so it can never pick up someone else's row.
       applicationStatus: applications.status,
+      applicationId: applications.id,
     })
     .from(jobs)
     .leftJoin(applications, and(eq(applications.jobId, jobs.id), eq(applications.userId, userId)))

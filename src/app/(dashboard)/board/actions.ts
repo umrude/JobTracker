@@ -57,6 +57,7 @@ export async function editApplicationAction(formData: FormData) {
 
   await updateApplication(input);
   revalidatePath("/board");
+  revalidatePath(`/applications/${input.id}`);
 }
 
 export async function moveApplicationAction(id: number, status: string) {
@@ -67,6 +68,7 @@ export async function moveApplicationAction(id: number, status: string) {
 
   await moveApplicationStatus(input.id, input.status);
   revalidatePath("/board");
+  revalidatePath(`/applications/${input.id}`);
 }
 
 export async function deleteApplicationAction(formData: FormData) {

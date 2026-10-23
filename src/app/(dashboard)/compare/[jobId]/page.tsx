@@ -103,7 +103,11 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
             )}
           </p>
           <div className="mt-2 flex">
-            <JobStage jobId={job.id} status={job.applicationStatus} writable={writable} />
+            <JobStage
+              jobId={job.id}
+              application={job.applicationId && job.applicationStatus ? { id: job.applicationId, status: job.applicationStatus } : null}
+              writable={writable}
+            />
           </div>
         </div>
         <div className="flex items-start gap-2">

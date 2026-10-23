@@ -5,6 +5,7 @@ import { requireUserId } from "@/server/current-user";
 import {
   confirmSuggestion,
   dismissSuggestion,
+  emailsForApplication,
   addApplicationFromSuggestion,
   linkSuggestion,
   pendingSuggestionCount,
@@ -27,6 +28,13 @@ async function scope() {
 export async function listPendingSuggestions() {
   const { db, userId } = await scope();
   return pendingSuggestionRows(db, userId);
+}
+
+// The emails about one of your applications (its page). Empty for anyone
+// else's.
+export async function listEmailsForApplication(applicationId: number) {
+  const { db, userId } = await scope();
+  return emailsForApplication(db, userId, applicationId);
 }
 
 export async function listRecentlyDecided() {

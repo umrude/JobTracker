@@ -25,7 +25,7 @@ A listing match comes with a **snippet**: about 120 characters around the match,
 - **A GET route, not a Server Action:** a page's Server Actions run one at a time, which makes search-as-you-type lag. GET requests run side by side, and the box cancels any it no longer needs (an `AbortController`), so a slow answer to an old query can't replace a newer one.
 - **It waits for a short pause in typing** (180 ms) and needs at least two characters.
 - **The keyboard:** `/` focuses it from anywhere (unless you're typing in a field), ↑ ↓ move, Enter opens, Esc closes. It follows the ARIA combobox pattern, so screen readers announce the results.
-- **A result opens the job's page** (`/compare/[jobId]`: the listing and its comparison), for applications and saved jobs alike. **"Filter the board by …"** at the bottom opens the board filtered by the same words.
+- **A result opens its page:** an application opens `/applications/[id]` (its status, history, and emails; see [status-history.md](status-history.md)), and a saved job opens its comparison (`/compare/[jobId]`). **"Filter the board by …"** at the bottom opens the board filtered by the same words.
 
 ## The board filter
 

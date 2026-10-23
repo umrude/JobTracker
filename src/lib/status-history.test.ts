@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { creationChanges, reconstructHistory } from "@/lib/status-history";
+import { creationChanges, reconstructHistory, stepGap, stepOrigin, stepTitle } from "@/lib/status-history";
 
 const day = (n: number) => new Date(Date.UTC(2026, 8, n));
 
@@ -88,5 +88,31 @@ describe("reconstructHistory", () => {
       [null, "applied", day(5), "estimated"],
       ["applied", "ghosted", day(14), "ghosted"],
     ]);
+  });
+});
+
+describe("timeline wording", () => {
+  it("names each step", () => {
+    expect(stepTitle(null, "applied")).toBe("Applied");
+    expect(stepTitle(null, "interviewing")).toBe("Added at Interviewing");
+    expect(stepTitle("applied", "rejected")).toBe("Moved to Rejected");
+  });
+
+  it("says where each step came from", () => {
+    const step = (source: "board" | "email" | "ghosted" | "estimated", emailSubject: string | null = null, emailFrom: string | null = null) =>
+      stepOrigin({ source, emailSubject, emailFrom });
+    expect(step("board")).toBe("On the board");
+    expect(step("email", "Interview invitation", "Acme Recruiting")).toBe("From an email: “Interview invitation”, Acme Recruiting");
+    expect(step("email")).toBe("From an email");
+    expect(step("ghosted")).toContain("Ghosted rule");
+    expect(step("estimated")).toContain("estimated");
+  });
+
+  it("counts whole days since the step before, and nothing when it can't", () => {
+    expect(stepGap(undefined, day(5))).toBeNull();
+    expect(stepGap(day(1), day(13))).toBe("12 days later");
+    expect(stepGap(day(1), day(2))).toBe("1 day later");
+    expect(stepGap(day(5), day(5))).toBeNull();
+    expect(stepGap(day(9), day(2))).toBeNull();
   });
 });

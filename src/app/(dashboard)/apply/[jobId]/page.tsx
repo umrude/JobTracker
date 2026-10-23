@@ -80,7 +80,11 @@ export default async function ApplyPage({ params, searchParams }: PageProps<"/ap
           {job.title} · {job.company}
         </p>
         <div className="mt-2 flex">
-          <JobStage jobId={job.id} status={job.applicationStatus} writable={writable} />
+          <JobStage
+            jobId={job.id}
+            application={job.applicationId && job.applicationStatus ? { id: job.applicationId, status: job.applicationStatus } : null}
+            writable={writable}
+          />
         </div>
       </div>
 

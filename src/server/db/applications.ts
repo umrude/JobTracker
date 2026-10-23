@@ -48,13 +48,16 @@ export async function listApplicationSummaries() {
 
 export type ApplicationSummary = Awaited<ReturnType<typeof listApplicationSummaries>>[number];
 
-// One application in full, for the edit dialog, loaded when it opens.
+// One application in full: for the edit dialog (loaded when it opens) and
+// the application's page.
 export async function getApplicationDetails(id: number) {
   const { db, userId } = await scope();
   return db
     .select({
       id: applications.id,
+      jobId: applications.jobId,
       status: applications.status,
+      appliedAt: applications.appliedAt,
       notes: applications.notes,
       passedScreening: sql<number>`${applications.passedScreeningAt} is not null`.mapWith(Boolean),
       company: jobs.company,

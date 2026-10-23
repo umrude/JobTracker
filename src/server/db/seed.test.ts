@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import * as schema from "@/server/db/schema";
@@ -50,7 +51,19 @@ describe("demo seed: Gmail suggestions", () => {
   });
 
   it("files the cold recruiter away", () => {
-    expect(recentlyDecidedRows(db, userId).map((row) => row.emailType)).toEqual(["not_relevant"]);
+    // Dismissed by the sync itself. (The confirmed ones are the showcase
+    // applications' history emails, which really were reviewed.)
+    const decided = recentlyDecidedRows(db, userId);
+    expect(decided.filter((row) => row.state === "dismissed").map((row) => row.emailType)).toEqual(["not_relevant"]);
+    expect(decided[0].emailType).toBe("not_relevant");
+  });
+
+  it("gives the showcase applications written histories that end where they are", () => {
+    const rows = db.select().from(schema.statusEvents).where(eq(schema.statusEvents.userId, userId)).all();
+    const bySource = new Set(rows.map((row) => row.source));
+    expect([...bySource].sort()).toEqual(["board", "email", "estimated", "ghosted"]);
+    // Every email step links to a confirmed email the page can show.
+    for (const row of rows.filter((r) => r.source === "email")) expect(row.emailEventId).not.toBeNull();
   });
 });
 

@@ -66,6 +66,22 @@ test("a comparison leads to a tailored resume checked for honesty", async ({ pag
   await expect(page.getByText("The honesty check changed one thing before showing you this")).toBeVisible();
 });
 
+test("a card opens its application's page, with its history and emails", async ({ page }) => {
+  await page.goto("/board");
+  await page.getByRole("link", { name: "Site Reliability Engineer" }).click();
+
+  await expect(page.getByRole("heading", { level: 1, name: "Site Reliability Engineer" })).toBeVisible();
+  const history = page.getByRole("list").filter({ hasText: "Moved to Offer" });
+  await expect(history.getByText("Applied", { exact: true })).toBeVisible();
+  await expect(history.getByText(/From an email: “Interview availability/)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Offer letter: Site Reliability Engineer" })).toBeVisible();
+
+  // And its status pill on the comparison page leads back here.
+  await page.getByRole("link", { name: /Comparison/ }).click();
+  await page.getByRole("link", { name: "Offer" }).click();
+  await expect(page).toHaveURL(/\/applications\/\d+$/);
+});
+
 test("email suggestions wait in the inbox for confirmation", async ({ page }) => {
   await page.goto("/inbox-review");
   await expect(page.getByRole("heading", { name: "Inbox review" })).toBeVisible();

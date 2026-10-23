@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useDraggable } from "@dnd-kit/core";
 import { BadgeCheckIcon, CalendarDaysIcon, FileQuestionIcon, GripVerticalIcon, PencilIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -56,7 +57,16 @@ export function ApplicationCard({ application, disabled }: { application: Applic
         </div>
       )}
 
-      <p className="leading-snug font-semibold">{application.title}</p>
+      {/* The application's page. A click opens it; a press-and-move still
+          drags the card (the mouse sensor waits for 4px of movement), and
+          draggable={false} stops the browser's own link dragging taking over. */}
+      <Link
+        href={`/applications/${application.id}`}
+        draggable={false}
+        className="block leading-snug font-semibold underline-offset-4 outline-none hover:underline focus-visible:underline"
+      >
+        {application.title}
+      </Link>
 
       <div className="flex items-center gap-2">
         <CompanyAvatar name={application.company} />

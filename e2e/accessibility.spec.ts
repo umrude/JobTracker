@@ -12,6 +12,8 @@ const PAGES = [
   "/compare/1", // a saved job's comparison
   "/compare/36", // an application's, with its status pill
   "/apply/1",
+  "/applications/7", // an application's page: timeline and emails
+  "/applications/10", // one the ghosted rule moved
   "/inbox-review",
   "/insights",
   "/resume",
