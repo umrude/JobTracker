@@ -6,6 +6,8 @@ A job application tracker that does the tedious parts of a job search: it compar
 
 Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It runs on your own machine, so your resume and inbox stay local. A read-only demo with sample data runs with no accounts or API keys.
 
+**[Try the live demo →](https://job-tracker-demo-f7ye.onrender.com/)** It's read-only, with a fake person, resume, and inbox. It's on a free host that sleeps when idle, so the first visit can take up to a minute.
+
 ![The board, with applications grouped by status](docs/screenshots/board.png)
 
 ## What it does
@@ -159,7 +161,7 @@ What keeps it safe to leave public:
 - **The auth routes return 404.**
 - **Every response gets basic security headers:** no framing, no MIME sniffing, and a strict referrer policy.
 
-CI runs the end-to-end tests against this exact build.
+CI runs the end-to-end tests against this exact build. To check the deployed demo itself, point the same tests at it: `E2E_BASE_URL=https://job-tracker-demo-f7ye.onrender.com pnpm test:e2e`.
 
 ### Commands
 

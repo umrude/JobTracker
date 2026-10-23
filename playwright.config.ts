@@ -6,8 +6,12 @@ import { defineConfig, devices } from "@playwright/test";
 // locally it's the dev server, on its own port so it doesn't clash with
 // yours. The server reseeds the demo when it starts (src/instrumentation.ts),
 // so every run starts from the same data.
+//
+// E2E_BASE_URL points the same tests at a deployed demo instead, with no
+// local server: E2E_BASE_URL=https://job-tracker-demo-f7ye.onrender.com pnpm test:e2e
 const PORT = 3100;
 const CI = Boolean(process.env.CI);
+const DEPLOYED = process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: "e2e",
@@ -16,16 +20,18 @@ export default defineConfig({
   retries: CI ? 1 : 0,
   reporter: CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: DEPLOYED ?? `http://localhost:${PORT}`,
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: `pnpm ${CI ? "start" : "dev"} --port ${PORT}`,
-    url: `http://localhost:${PORT}/board`,
-    // Locally, reuse a demo server you already started on this port.
-    reuseExistingServer: !CI,
-    env: { DEMO_MODE: "true" },
-    timeout: 120_000,
-  },
+  webServer: DEPLOYED
+    ? undefined
+    : {
+        command: `pnpm ${CI ? "start" : "dev"} --port ${PORT}`,
+        url: `http://localhost:${PORT}/board`,
+        // Locally, reuse a demo server you already started on this port.
+        reuseExistingServer: !CI,
+        env: { DEMO_MODE: "true" },
+        timeout: 120_000,
+      },
 });
