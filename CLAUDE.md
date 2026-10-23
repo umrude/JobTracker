@@ -19,14 +19,14 @@ A web app for tracking job applications. Portfolio project, so code quality, tes
 - Auth.js with Google provider, restricted to a single allowed email (`ALLOWED_EMAIL`)
 - Tailwind + shadcn/ui, `dnd-kit` for drag and drop
 - Anthropic API for classification, comparison, and cover letters
-- Vitest for unit tests, Playwright for a couple of e2e flows (run in demo mode)
+- Vitest for unit tests, Playwright for a couple of e2e flows (run in demo mode; not written yet, planned with CI) and for the README screenshots (`pnpm screenshots`)
 ## Folder structure
  
 ```
 src/
   app/
-    (dashboard)/        board, saved, compare, cover-letters, inbox-review
-    api/sync/           Gmail sync route handler
+    (dashboard)/        board, saved, compare, apply (tailored resume + cover letter), inbox-review, insights, resume, profile
+    api/                Gmail sync and OAuth callback, search, PDF routes
   server/               server-only code; every file imports "server-only"
     db/                 Drizzle schema, client factory, seed
     gmail/              mail sources (Gmail, demo inbox), OAuth, token encryption, sync pipeline
@@ -115,6 +115,7 @@ pnpm demo:pdfs      # rebuild the demo's pre-built PDFs (after db:seed; needs Te
 pnpm eval:classifier # run the email classifier on its eval set (real API calls, costs a few cents)
 pnpm perf:seed       # build data/perf.db (demo + 300 applications) for measuring performance
 pnpm perf:measure    # time and size each page of a running production build (docs/performance.md)
+pnpm screenshots     # retake the README screenshots from a running demo (DEMO_MODE=true pnpm dev). Commit the result.
 ```
  
 Before saying a task is done, run `pnpm typecheck && pnpm lint && pnpm test` and fix any failures.
@@ -136,7 +137,7 @@ Work on one phase at a time. Do not start a later phase unless I ask.
 4. **Gmail sync**: OAuth, incremental sync, pre-filter, classifier, review inbox, classifier eval set.
 5. **Insights**: a skill-gap recap across comparisons and applications (skills most often missing, whether they're in my profile, Learning, or absent, and after Phase 4, how they relate to rejections). Shows counts and facts, never causal claims. Demo seed with enough fake history to be meaningful.
 6. **Polish**: README with architecture diagram and decision log, screenshots/GIF from demo mode, CI (GitHub Actions), hosted read-only demo.
-**Current phase: 5 complete, 6 not started** (Phase 5: listings and "passed screening" on applications, the Insights page with skill gaps, profile standing, and outcome counts, Compare all with a cost estimate, and demo history; see docs/insights.md) (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page. Phase 3 complete: LaTeX source and compiling, profile with "I have this" and skill aliases, multi-user readiness, tailored resumes with honesty checks and per-change review, cover letters, and the tailored comparison; see docs/tailored-resumes.md and docs/cover-letters.md. Phase 4 complete: Gmail OAuth with encrypted tokens, history-based sync, pre-filter and thread-aware matching, Haiku classifier with a 40-case eval, review inbox with live proposals, ghosted rule, pre-synced demo; see docs/gmail-sync.md)
+**Current phase: 6 in progress** (done so far: README with architecture diagram, decision log, and screenshots from the demo; UI redesign with dark mode and a collapsible sidebar; search; performance work. Next: CI with GitHub Actions and the first e2e flows, then the hosted read-only demo, which should make `AUTH_SECRET` and `ALLOWED_EMAIL` optional when `DEMO_MODE=true`) (Phase 5 complete: listings and "passed screening" on applications, the Insights page with skill gaps, profile standing, and outcome counts, Compare all with a cost estimate, and demo history; see docs/insights.md) (Phase 1 complete: foundation, demo mode, auth, manual kanban. Phase 2 complete: saved jobs, resume upload with versions, LLM comparison with compare page. Phase 3 complete: LaTeX source and compiling, profile with "I have this" and skill aliases, multi-user readiness, tailored resumes with honesty checks and per-change review, cover letters, and the tailored comparison; see docs/tailored-resumes.md and docs/cover-letters.md. Phase 4 complete: Gmail OAuth with encrypted tokens, history-based sync, pre-filter and thread-aware matching, Haiku classifier with a 40-case eval, review inbox with live proposals, ghosted rule, pre-synced demo; see docs/gmail-sync.md)
  
 ## Hosting
 

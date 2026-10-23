@@ -16,7 +16,8 @@
     "demo:pdfs": "tsx scripts/build-demo-pdfs.ts",
     "eval:classifier": "tsx --conditions=react-server --env-file=.env scripts/eval-classifier.ts",
     "perf:seed": "tsx scripts/perf-seed.ts",
-    "perf:measure": "tsx scripts/perf-measure.ts"
+    "perf:measure": "tsx scripts/perf-measure.ts",
+    "screenshots": "tsx scripts/screenshots.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
