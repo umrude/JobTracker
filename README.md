@@ -1,5 +1,7 @@
 # Job Tracker
 
+[![CI](https://github.com/umrude/JobTracker/actions/workflows/ci.yml/badge.svg)](https://github.com/umrude/JobTracker/actions/workflows/ci.yml)
+
 A job application tracker that does the tedious parts of a job search: it compares listings against your resume, tailors your resume and cover letter to a listing without inventing anything, and reads your Gmail to suggest status changes for you to confirm.
 
 Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It runs on your own machine, so your resume and inbox stay local. A read-only demo with sample data runs with no accounts or API keys.
@@ -154,6 +156,7 @@ In live mode, "Preview demo mode" in the sidebar switches to a writable copy of 
 | `pnpm dev` | Development server |
 | `pnpm build` / `pnpm start` | Production build and server |
 | `pnpm typecheck` / `pnpm lint` / `pnpm test` | Type check, lint, unit tests |
+| `pnpm test:e2e` | End-to-end tests against the demo (starts its own server on port 3100) |
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / build the demo database |
 | `pnpm demo:pdfs` | Rebuild the demo's pre-built PDFs (needs Tectonic) |
 | `pnpm eval:classifier` | Run the email classifier on its eval set (real API calls, a few cents) |
@@ -169,6 +172,10 @@ About 490 unit tests run with Vitest, and none of them call the real Anthropic A
 - **Data isolation:** `src/server/db/isolation.test.ts` runs two users against a real SQLite database, with a case for every data-layer function.
 - **Migrations:** checked for the foreign-key rules Drizzle doesn't generate.
 - **Real Tectonic:** one test compiles the demo resume with the real compiler when Tectonic is on your PATH, and is skipped otherwise.
+
+**End-to-end tests** (Playwright, in `e2e/`) drive the demo in a real browser. They cover the board and its filter, read-only mode, search, a comparison leading to a tailored resume and its honesty check, the inbox, insights, and the theme and sidebar being remembered across reloads.
+
+**CI** (GitHub Actions) runs on every push and pull request with no real secrets. One job runs the type check, lint, and unit tests. The other seeds the demo, makes a production build, and runs the end-to-end tests against it. On failure, the Playwright report is uploaded as an artifact.
 
 ## Docs
 

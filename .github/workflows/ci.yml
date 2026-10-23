@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the run still in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# No real secrets anywhere: unit tests mock the Anthropic client and Gmail,
+# and e2e runs the demo, which never calls an external service. These two
+# are required by env.ts at startup, so CI passes placeholders.
+env:
+  ALLOWED_EMAIL: ci@example.com
+  AUTH_SECRET: ci-placeholder-not-a-secret
+
+jobs:
+  checks:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version from package.json's packageManager
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      # The real-Tectonic test skips itself: there's no TeX engine here.
+      - run: pnpm test
+
+  e2e:
+    name: End-to-end (demo mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DEMO_MODE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:seed
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      # playwright.config.ts starts the production server (pnpm start) on CI.
+      - run: pnpm test:e2e
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

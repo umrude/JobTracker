@@ -1,0 +1,5 @@
+# Check text files out with LF on every platform, whatever core.autocrlf
+# says, so a Windows clone and CI see the same bytes (tests compare LaTeX
+# output line by line). Uploaded .tex files with CRLF still work: the
+# LaTeX code keeps whichever line ending the source uses.
+* text=auto eol=lf

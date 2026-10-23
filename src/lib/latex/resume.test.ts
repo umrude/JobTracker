@@ -302,6 +302,22 @@ describe("applyResumeEdits: sections", () => {
     expect(after.sections[2].entries[0].bullets[0].text).toBe("Taught weekly sessions");
   });
 
+  it("keeps Windows line endings throughout, for a .tex saved on Windows", () => {
+    const crlf = DEMO.replace(/\r?\n/g, "\r\n");
+    const resume = parse(crlf);
+    const [b1, b2] = resume.sections[1].entries[0].bullets;
+    const tex = apply(crlf, {
+      summary: "Frontend engineer.",
+      skills: [{ categoryId: "s2", items: ["Next.js", "React"] }],
+      entries: [{ entryId: "e3", bullets: [b2.text, b1.text] }],
+      sections: [{ newTitle: "Volunteering", afterSection: "Experience", entries: [{ heading: ["Mentor", "2024", "Code Club", ""], bullets: ["Taught weekly sessions"] }] }],
+    });
+    // Every line break is still CRLF: no bare LF from the inserted text.
+    expect(tex).not.toMatch(/(?<!\r)\n/);
+    expect(tex).toContain("\\section*{Summary}\r\nFrontend engineer.\r\n");
+    expect(parse(tex).sections.map((s) => s.title)).toContain("Volunteering");
+  });
+
   it("puts a new section last when afterSection is null", () => {
     const tex = apply(DEMO, {
       sections: [{ newTitle: "Awards", afterSection: null, entries: [{ heading: ["Hackathon winner", "2022", "", ""], bullets: [] }] }],
@@ -310,7 +326,8 @@ describe("applyResumeEdits: sections", () => {
     expect(after.sections.map((s) => s.title).at(-1)).toBe("Awards");
     // No bullets means no list, like an education entry.
     expect(after.sections.at(-1)?.entries[0].bullets).toEqual([]);
-    expect(tex.indexOf("\section{Awards}")).toBeLessThan(tex.indexOf("\end{document}"));
+    expect(tex.indexOf("\\section{Awards}")).toBeGreaterThan(-1);
+    expect(tex.indexOf("\\section{Awards}")).toBeLessThan(tex.indexOf("\\end{document}"));
   });
 
   it("keeps Windows line endings in new entries", () => {

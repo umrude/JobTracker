@@ -16,7 +16,8 @@ export default defineConfig({
   test: {
     environment: "node",
     // Claude Code worktrees under .claude/ hold full copies of the repo,
-    // tests included; don't run those duplicates.
-    exclude: [...configDefaults.exclude, ".claude/**"],
+    // tests included; don't run those duplicates. e2e/ is Playwright's
+    // (pnpm test:e2e), which Vitest's *.spec.ts pattern would also match.
+    exclude: [...configDefaults.exclude, ".claude/**", "e2e/**"],
   },
 });
