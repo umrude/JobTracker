@@ -17,3 +17,14 @@ export const formatUtcDate = (date: Date): string => UTC_DATE.format(date);
 export function plural(count: number, word: string, pluralWord = `${word}s`): string {
   return `${count} ${count === 1 ? word : pluralWord}`;
 }
+
+const DAY = 24 * 60 * 60 * 1000;
+
+// "today", "3d ago", "5w ago", "4mo ago": how long ago, compactly.
+export function sinceLabel(date: Date, now: Date): string {
+  const days = Math.max(0, Math.floor((now.getTime() - date.getTime()) / DAY));
+  if (days === 0) return "today";
+  if (days < 14) return `${days}d ago`;
+  if (days < 60) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}

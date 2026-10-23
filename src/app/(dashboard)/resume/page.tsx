@@ -31,7 +31,7 @@ export default async function ResumePage() {
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Resume</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Resume</h1>
         <p className="text-sm text-muted-foreground">
           {mode === "demo" && !writable
             ? "Demo mode: showing a sample resume. Uploading is disabled."
@@ -117,7 +117,7 @@ function PdfLink({ resumeId }: { resumeId: number }) {
 
 function VersionRow({ resume, disabled }: { resume: Resume; disabled: boolean }) {
   return (
-    <details className="rounded-md border p-3 text-sm">
+    <details className="rounded-xl border bg-card p-3 text-sm">
       <summary className="flex cursor-pointer items-center justify-between gap-4">
         <span>
           <span className="font-medium">Version {resume.version}</span>

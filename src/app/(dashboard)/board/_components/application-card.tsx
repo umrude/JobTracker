@@ -1,92 +1,88 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { PencilIcon } from "lucide-react";
+import { BadgeCheckIcon, CalendarDaysIcon, FileQuestionIcon, PencilIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { CompanyAvatar } from "@/components/company-avatar";
+import { sinceLabel } from "@/lib/format";
 import type { ApplicationSummary } from "@/server/db/applications";
 import { ApplicationForm } from "./application-form";
 
-export function ApplicationCard({
-  application,
-  disabled,
-}: {
-  application: ApplicationSummary;
-  disabled: boolean;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: application.id, disabled });
-
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
+export function ApplicationCard({ application, disabled }: { application: ApplicationSummary; disabled: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: application.id, disabled });
+  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
 
   return (
-    <Card
+    <article
       ref={setNodeRef}
       style={style}
       {...listeners}
       {...attributes}
       className={cn(
-        "touch-none gap-2 py-3",
+        "group touch-none space-y-2.5 rounded-xl bg-muted/60 p-3 text-sm ring-1 ring-transparent transition-[box-shadow,background-color] hover:bg-muted hover:ring-foreground/10 dark:bg-muted/50",
         !disabled && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >
-      <CardHeader className="px-3">
-        <CardTitle className="text-sm leading-snug">
-          {application.title}
-        </CardTitle>
-        <CardAction>
-          <ApplicationForm
-            mode="edit"
-            applicationId={application.id}
-            company={application.company}
-            disabled={disabled}
-            trigger={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                disabled={disabled}
-                aria-label="Edit application"
-                // Dragging starts on pointerdown; stop it here so the
-                // button can register its own click instead of being
-                // swallowed by the card's drag listeners.
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <PencilIcon />
-              </Button>
-            }
-          />
-        </CardAction>
-      </CardHeader>
-      <CardContent className="space-y-1.5 px-3 text-xs text-muted-foreground">
-        <p>{application.company}</p>
-        {(application.passedScreening || !application.hasListing) && (
-          <p className="flex flex-wrap gap-1">
-            {application.passedScreening && (
-              <span className="rounded-full border px-1.5 py-px">Passed screening</span>
-            )}
-            {!application.hasListing && (
-              // A title, not a tooltip component: it's a quiet hint on a
-              // draggable card, and native titles don't fight the drag.
-              <span
-                className="rounded-full border border-dashed px-1.5 py-px"
-                title="No listing: it can't be compared or counted in insights. Edit to add it."
-              >
-                No listing
-              </span>
-            )}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      {(application.passedScreening || !application.hasListing) && (
+        <div className="flex flex-wrap gap-1.5">
+          {application.passedScreening && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+              <BadgeCheckIcon className="size-3" />
+              Passed screening
+            </span>
+          )}
+          {!application.hasListing && (
+            // A title, not a tooltip component: it's a quiet hint on a
+            // draggable card, and native titles don't fight the drag.
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-zinc-500/12 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-300"
+              title="No listing: it can't be compared or counted in insights. Edit to add it."
+            >
+              <FileQuestionIcon className="size-3" />
+              No listing
+            </span>
+          )}
+        </div>
+      )}
+
+      <p className="leading-snug font-semibold">{application.title}</p>
+
+      <div className="flex items-center gap-2">
+        <CompanyAvatar name={application.company} />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">{application.company}</span>
+        <ApplicationForm
+          mode="edit"
+          applicationId={application.id}
+          company={application.company}
+          disabled={disabled}
+          trigger={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={disabled}
+              aria-label={`Edit ${application.company} application`}
+              className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
+              // Dragging starts on pointerdown; stop it here so the
+              // button can register its own click instead of being
+              // swallowed by the card's drag listeners.
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <PencilIcon />
+            </Button>
+          }
+        />
+      </div>
+
+      {application.appliedAt && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <CalendarDaysIcon className="size-3.5" />
+          {/* Counted in whole days from now; the server and browser render a
+              second apart, so a day boundary can differ: harmless. */}
+          <span suppressHydrationWarning>Applied {sinceLabel(application.appliedAt, new Date())}</span>
+        </p>
+      )}
+    </article>
   );
 }

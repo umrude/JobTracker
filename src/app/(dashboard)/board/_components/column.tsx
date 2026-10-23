@@ -5,6 +5,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { STATUS_LABELS, type Status } from "@/lib/schemas/status";
+import { STATUS_STYLE } from "@/lib/status-style";
 import type { ApplicationSummary } from "@/server/db/applications";
 import { ApplicationCard } from "./application-card";
 
@@ -29,33 +30,34 @@ export function Column({
   const hidden = applications.length - visible.length;
 
   return (
-    <div
+    <section
       ref={setNodeRef}
+      aria-label={`${STATUS_LABELS[status]}: ${applications.length}`}
       className={cn(
-        "flex w-72 shrink-0 flex-col gap-2 rounded-lg bg-muted/40 p-2",
+        "flex w-72 shrink-0 flex-col gap-3 rounded-2xl bg-card p-3 shadow-sm ring-1 ring-foreground/5 transition-shadow",
         isOver && !disabled && "ring-2 ring-primary",
       )}
     >
-      <h2 className="flex items-baseline justify-between px-2 py-1 text-sm font-medium">
+      <h2 className="flex items-center gap-2 px-1 pt-1 text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+        <span className={cn("size-2 rounded-full", STATUS_STYLE[status].dot)} />
         {STATUS_LABELS[status]}
-        <span className="text-xs text-muted-foreground">
-          {applications.length}
-        </span>
+        <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[11px] tracking-normal tabular-nums">{applications.length}</span>
       </h2>
-      <div className="flex min-h-16 flex-col gap-2">
+      <div className="flex min-h-20 flex-col gap-2.5">
         {visible.map((application) => (
-          <ApplicationCard
-            key={application.id}
-            application={application}
-            disabled={disabled}
-          />
+          <ApplicationCard key={application.id} application={application} disabled={disabled} />
         ))}
+        {applications.length === 0 && (
+          <p className="rounded-xl border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+            {disabled ? "Nothing here" : "Drag a card here"}
+          </p>
+        )}
         {hidden > 0 && (
           <Button type="button" variant="ghost" size="sm" onClick={() => setShown((n) => n + COLUMN_PAGE)}>
             Show {Math.min(hidden, COLUMN_PAGE)} more ({hidden} hidden)
           </Button>
         )}
       </div>
-    </div>
+    </section>
   );
 }

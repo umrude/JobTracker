@@ -31,7 +31,7 @@ export default async function CompareIndexPage() {
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Compare</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Compare</h1>
         <p className="text-sm text-muted-foreground">
           {activeResume
             ? `Pick a job to compare against your active resume (v${activeResume.version}).`
@@ -71,7 +71,7 @@ function JobList({
   return (
     <section className="space-y-2">
       <h2 className="font-medium">{heading}</h2>
-      <ul className="divide-y rounded-lg border">
+      <ul className="divide-y rounded-xl border bg-card">
         {rows.map((job) => (
           <li key={job.id}>
             <Link href={`/compare/${job.id}`} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-muted/50">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeScript } from "@/components/theme-script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,16 +16,23 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Job Tracker",
-  description: "A single-user job application tracker.",
+  description: "Track job applications, tailor your resume, and see what your search is telling you.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
+    // suppressHydrationWarning: ThemeScript adds the "dark" class before
+    // React hydrates, so <html>'s class differs from the server's on
+    // purpose. It only applies to this element, not its children.
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
+      <head>
+        <ThemeScript />
+      </head>
+      <body className="flex min-h-full flex-col bg-canvas">
         <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>

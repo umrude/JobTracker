@@ -36,6 +36,7 @@ export async function listApplicationSummaries() {
       hasListing: sql<number>`coalesce(trim(${jobs.listingText}), '') != ''`.mapWith(Boolean),
       passedScreening: sql<number>`${applications.passedScreeningAt} is not null`.mapWith(Boolean),
       updatedAt: applications.updatedAt,
+      appliedAt: applications.appliedAt,
     })
     .from(applications)
     .innerJoin(jobs, and(eq(jobs.id, applications.jobId), eq(jobs.userId, userId)))

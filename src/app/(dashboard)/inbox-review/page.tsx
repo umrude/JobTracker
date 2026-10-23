@@ -97,7 +97,7 @@ export default async function InboxReviewPage({ searchParams }: PageProps<"/inbo
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Inbox review</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Inbox review</h1>
         <p className="text-sm text-muted-foreground">
           Email about your applications becomes suggestions here. Nothing changes until you confirm it.
         </p>
@@ -175,7 +175,7 @@ export default async function InboxReviewPage({ searchParams }: PageProps<"/inbo
       </section>
 
       {decided.length > 0 && (
-        <details className="rounded-lg border p-4 text-sm">
+        <details className="rounded-xl border bg-card p-4 text-sm">
           <summary className="cursor-pointer font-medium">Recently reviewed</summary>
           <ul className="mt-3 space-y-1.5">
             {decided.map((row) => (

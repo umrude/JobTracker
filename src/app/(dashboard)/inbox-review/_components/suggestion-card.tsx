@@ -40,7 +40,7 @@ export function SuggestionCard({
   const from = savedJob ? "Saved" : row.currentStatus ? STATUS_LABELS[row.currentStatus] : null;
 
   return (
-    <article className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between">
+    <article className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <TypeBadge row={row} />

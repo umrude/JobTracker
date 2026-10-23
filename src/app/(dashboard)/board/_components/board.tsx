@@ -142,7 +142,10 @@ export function Board({
       </div>
       <DragOverlay>
         {activeApplication ? (
-          <ApplicationCard application={activeApplication} disabled />
+          // Lifted and tilted while dragging: a little life, and it reads as "picked up".
+          <div className="rotate-2 rounded-xl shadow-xl shadow-foreground/10">
+            <ApplicationCard application={activeApplication} disabled />
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>

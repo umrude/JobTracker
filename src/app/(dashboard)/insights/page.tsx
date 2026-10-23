@@ -30,13 +30,13 @@ export default async function InsightsPage({ searchParams }: PageProps<"/insight
     <div className="flex flex-1 flex-col gap-4 p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Insights</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Insights</h1>
           <p className="text-sm text-muted-foreground">
             What your listings ask for that your resume doesn&apos;t show, and how that lines up with outcomes. Counts, not
             causes.
           </p>
         </div>
-        <nav className="flex gap-1 rounded-lg border p-1 text-sm" aria-label="Which listings">
+        <nav className="flex gap-1 rounded-lg border bg-card p-1 text-sm" aria-label="Which listings">
           <ScopeLink scope="all" current={scope}>
             All compared listings
           </ScopeLink>
@@ -172,7 +172,7 @@ function OutcomeSummary({ insights }: { insights: Insights }) {
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       {stats.map((stat) => (
-        <div key={stat.label} className="rounded-lg border p-4">
+        <div key={stat.label} className="rounded-xl border bg-card p-4">
           <p className="text-sm text-muted-foreground">{stat.label}</p>
           <p className="text-2xl font-semibold tabular-nums">{stat.value}</p>
           {stat.note && <p className="text-xs text-muted-foreground">{stat.note}</p>}

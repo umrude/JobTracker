@@ -54,7 +54,7 @@ export default async function ProfilePage() {
     <div className="flex flex-1 flex-col gap-6 p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
-          <h1 className="text-xl font-semibold">Profile</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
           <p className="text-sm text-muted-foreground">
             {mode === "demo" && !writable
               ? "Demo mode: browsing a sample profile. Editing is disabled."
