@@ -51,9 +51,29 @@ describe("describeGaps", () => {
   });
 
   it("offers similar skills for gaps not in your profile", () => {
-    expect(describeGaps(["Leaflet maps", "Kubernetes"], SKILLS, resolver)).toEqual([
-      { name: "Leaflet maps", status: "absent", suggestions: [{ id: 3, name: "Leaflet" }] },
+    expect(describeGaps(["Leaflet maps", "Kubernetes"], SKILLS, resolver)).toMatchObject([
+      { name: "Leaflet maps", suggestions: [{ id: 3, name: "Leaflet" }] },
       { name: "Kubernetes", status: "absent", suggestions: [] },
     ]);
+  });
+
+  it("keeps the whole phrase as a choice when you have every skill inside it", () => {
+    const [gap] = describeGaps(["Leaflet maps"], SKILLS, resolver);
+    expect(gap.status).toBe("partial");
+    expect(gap.candidates).toEqual([
+      { name: "Leaflet", inProfile: true },
+      { name: "Leaflet maps", inProfile: false },
+    ]);
+  });
+
+  it("splits a phrase into its skills, and says which you have", () => {
+    const [gap] = describeGaps(["Expertise in managing cloud infrastructure (AWS, Azure, Google Cloud)"], SKILLS, resolver);
+    expect(gap.candidates.map((c) => c.name)).toEqual(["cloud infrastructure", "AWS", "Azure", "Google Cloud"]);
+    expect(gap.status).toBe("absent");
+
+    const withAws = createSkillResolver([...SKILLS, skill(6, "AWS")]);
+    const [partial] = describeGaps(["cloud infrastructure (AWS, Azure)"], [...SKILLS, skill(6, "AWS")], withAws);
+    expect(partial.status).toBe("partial");
+    expect(partial.candidates.filter((c) => c.inProfile).map((c) => c.name)).toEqual(["AWS"]);
   });
 });

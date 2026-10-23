@@ -18,6 +18,7 @@ import { LENGTH_LABELS, TONE_LABELS } from "@/lib/cover-letter/labels";
 import { cn } from "@/lib/utils";
 import { CoverLetterOptions } from "../_components/cover-letter-options";
 import { LetterEditor } from "../_components/letter-editor";
+import { JobStage } from "../../saved/_components/job-stage";
 import { GenerateButton } from "../_components/generate-button";
 import { ReviewPanel } from "../_components/review-panel";
 import { TrimPanel } from "../_components/trim-panel";
@@ -78,6 +79,9 @@ export default async function ApplyPage({ params, searchParams }: PageProps<"/ap
         <p className="text-sm text-muted-foreground">
           {job.title} · {job.company}
         </p>
+        <div className="mt-2 flex">
+          <JobStage jobId={job.id} status={job.applicationStatus} writable={writable} />
+        </div>
       </div>
 
       {activeResume && !activeResume.latexSource && (

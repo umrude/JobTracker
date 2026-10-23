@@ -41,8 +41,9 @@ describe("confirmGapSchema", () => {
       name: "Postgres",
       skillId: 9,
     });
-    expect(confirmGapSchema.parse({ mode: "learning", jobId: "3", name: "Docker", category: "" })).toMatchObject({
+    expect(confirmGapSchema.parse({ mode: "learning", jobId: "3", names: ["Docker"], category: "" })).toMatchObject({
       mode: "learning",
+      names: ["Docker"],
       category: undefined,
     });
     expect(confirmGapSchema.parse({ mode: "highlight", jobId: "3", text: "5+ years of experience" }).mode).toBe("highlight");
@@ -51,5 +52,13 @@ describe("confirmGapSchema", () => {
   it("rejects an alias without a skill, and unknown modes", () => {
     expect(confirmGapSchema.safeParse({ mode: "alias", jobId: "3", name: "Postgres" }).success).toBe(false);
     expect(confirmGapSchema.safeParse({ mode: "ignore", jobId: "3" }).success).toBe(false);
+  });
+
+  it("takes several skill names, but at least one", () => {
+    expect(confirmGapSchema.parse({ mode: "skill", jobId: "3", names: [" AWS ", "Azure"] })).toMatchObject({
+      names: ["AWS", "Azure"],
+    });
+    expect(confirmGapSchema.safeParse({ mode: "skill", jobId: "3", names: [] }).success).toBe(false);
+    expect(confirmGapSchema.safeParse({ mode: "skill", jobId: "3", names: [""] }).success).toBe(false);
   });
 });

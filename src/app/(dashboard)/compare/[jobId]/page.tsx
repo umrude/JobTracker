@@ -27,6 +27,7 @@ import { RunComparisonButton } from "../_components/run-comparison-button";
 import { GapDialog } from "../_components/gap-dialog";
 import { formatDateTime } from "@/lib/format";
 import { Notice } from "@/components/notice";
+import { JobStage } from "../../saved/_components/job-stage";
 
 
 // A Server Component that only reads: it shows the saved comparison and
@@ -101,6 +102,9 @@ export default async function ComparePage({ params }: PageProps<"/compare/[jobId
               </>
             )}
           </p>
+          <div className="mt-2 flex">
+            <JobStage jobId={job.id} status={job.applicationStatus} writable={writable} />
+          </div>
         </div>
         <div className="flex items-start gap-2">
           <Link href={`/apply/${job.id}`} className={buttonVariants({ variant: "default" })}>
@@ -332,8 +336,13 @@ function GapsCard({
                   </span>
                 )}
                 {gap.status === "learning" && <span className="text-xs text-muted-foreground">· Learning</span>}
-                {gap.status === "absent" && writable && (
-                  <GapDialog jobId={jobId} name={gap.name} suggestions={gap.suggestions} categories={categories} />
+                {gap.status === "partial" && (
+                  <span className="text-xs text-primary" title="These are in your profile, just not on this resume">
+                    · {gap.candidates.filter((c) => c.inProfile).map((c) => c.name).join(", ")} in profile
+                  </span>
+                )}
+                {(gap.status === "absent" || gap.status === "partial") && writable && (
+                  <GapDialog jobId={jobId} name={gap.name} suggestions={gap.suggestions} candidates={gap.candidates} categories={categories} />
                 )}
               </li>
             ))}

@@ -3,7 +3,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { getMode } from "@/server/mode";
 import { requireUserId } from "@/server/current-user";
-import { comparisons, jobs, resumes } from "@/server/db/schema";
+import { applications, comparisons, jobs, resumes } from "@/server/db/schema";
 import { insertComparisonWithSkills, insertTailoredComparisonRow } from "@/server/db/comparison-store";
 import type { Comparison } from "@/lib/schemas/comparison";
 
@@ -21,8 +21,13 @@ export async function getJobForComparison(id: number) {
       title: jobs.title,
       url: jobs.url,
       listingText: jobs.listingText,
+      // The job's application, if you've applied: the page shows its
+      // status, or "Move to Applied" while it's still a saved job. The join
+      // is scoped to you too, so it can never pick up someone else's row.
+      applicationStatus: applications.status,
     })
     .from(jobs)
+    .leftJoin(applications, and(eq(applications.jobId, jobs.id), eq(applications.userId, userId)))
     .where(and(eq(jobs.id, id), eq(jobs.userId, userId)))
     .get();
 }

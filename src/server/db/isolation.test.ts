@@ -170,6 +170,16 @@ describe("comparisons", () => {
     expect(await comparisonsDal.getLatestComparisonRow(job.id)).toBeUndefined();
     expect((await comparisonsDal.listLatestComparisonRows()).size).toBe(0);
   });
+
+  it("shows a job's application status to its owner only", async () => {
+    as(ALICE);
+    const job = await jobsDal.createSavedJob({ company: "Acme", title: "Engineer", listingText: "x" });
+    expect(await comparisonsDal.getJobForComparison(job.id)).toMatchObject({ applicationStatus: null });
+    expect((await jobsDal.moveSavedJobToApplied(job.id, new Date())).ok).toBe(true);
+    expect(await comparisonsDal.getJobForComparison(job.id)).toMatchObject({ applicationStatus: "applied" });
+    as(BOB);
+    expect(await comparisonsDal.getJobForComparison(job.id)).toBeUndefined();
+  });
 });
 
 describe("profile", () => {
@@ -259,7 +269,7 @@ describe("comparison gaps and skill rows", () => {
 
   it("records a confirmed gap as yours, sourced from the job", async () => {
     const { job } = await aliceJobWithSkill();
-    expect((await profileDal.confirmGap({ mode: "learning", jobId: job.id, name: "Docker" })).ok).toBe(true);
+    expect((await profileDal.confirmGap({ mode: "learning", jobId: job.id, names: ["Docker"] })).ok).toBe(true);
     expect((await profileDal.confirmGap({ mode: "highlight", jobId: job.id, text: "5+ years" })).ok).toBe(true);
     const profile = await profileDal.loadProfile();
     expect(profile.skills.find((s) => s.name === "Docker")).toMatchObject({
@@ -269,6 +279,22 @@ describe("comparison gaps and skill rows", () => {
       userId: ALICE,
     });
     expect(profile.highlights[0]).toMatchObject({ text: "5+ years", source: "gap", sourceJobId: job.id });
+  });
+
+  it("adds each ticked skill, skipping ones already in your profile", async () => {
+    const { job } = await aliceJobWithSkill();
+    const input = { mode: "skill" as const, jobId: job.id, names: ["AWS", "postgresql", "Azure"], proficiency: "proficient" as const };
+    expect((await profileDal.confirmGap(input)).ok).toBe(true);
+    const skills = (await profileDal.loadProfile()).skills;
+    expect(skills.map((s) => s.name)).toEqual(["PostgreSQL", "AWS", "Azure"]);
+    expect(skills[1]).toMatchObject({ proficiency: "proficient", source: "gap", sourceJobId: job.id, userId: ALICE });
+    // Everything already there: nothing to add.
+    expect((await profileDal.confirmGap({ ...input, names: ["AWS", "Azure"] })).ok).toBe(false);
+    // Bob's profile is untouched, and he can add the same names to his own.
+    as(BOB);
+    expect((await profileDal.loadProfile()).skills).toEqual([]);
+    const bobsJob = await jobsDal.createSavedJob({ company: "Globex", title: "Dev" });
+    expect((await profileDal.confirmGap({ ...input, jobId: bobsJob.id })).ok).toBe(true);
   });
 
   it("adds a gap's name as an alias of your skill", async () => {
@@ -282,7 +308,7 @@ describe("comparison gaps and skill rows", () => {
     as(BOB);
     const bobsJob = await jobsDal.createSavedJob({ company: "Globex", title: "Dev" });
     // Alice's job as the source.
-    expect((await profileDal.confirmGap({ mode: "learning", jobId: job.id, name: "Docker" })).ok).toBe(false);
+    expect((await profileDal.confirmGap({ mode: "learning", jobId: job.id, names: ["Docker"] })).ok).toBe(false);
     // Bob's own job, but Alice's skill as the alias target.
     expect(
       (await profileDal.confirmGap({ mode: "alias", jobId: bobsJob.id, name: "PG", skillId: skill.id })).ok,

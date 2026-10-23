@@ -11,14 +11,17 @@ import { ActionMessage } from "@/components/action-message";
 const initialState: FormState = { status: "idle" };
 
 // A Client Component only because it shows the pending state and the
-// returned error. On success the action redirects to /board, so there's
-// no success state to render here.
+// returned error. On success the action redirects to /board, or with
+// `stay`, revalidates the current page (which then shows the status
+// instead of this button), so there's no success state to render here.
 export function MoveToAppliedButton({
   jobId,
   disabled,
+  stay = false,
 }: {
   jobId: number;
   disabled: boolean;
+  stay?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     moveToAppliedAction,
@@ -28,6 +31,7 @@ export function MoveToAppliedButton({
   return (
     <form action={formAction} className="flex flex-col items-end gap-1">
       <input type="hidden" name="id" value={jobId} />
+      {stay && <input type="hidden" name="stay" value="true" />}
       <MaybeDisabledTooltip disabled={disabled} message="Disabled in demo mode">
         <Button type="submit" size="sm" disabled={disabled || pending}>
           <SendIcon />

@@ -20,6 +20,8 @@ import { EXPERIENCE_LABELS, PROFICIENCY_LABELS } from "@/lib/profile/labels";
 import { confirmGapAction } from "../actions";
 import { ActionMessage } from "@/components/action-message";
 import { NativeSelect } from "@/components/ui/native-select";
+import type { SkillCandidate } from "@/lib/skills/candidates";
+import { plural } from "@/lib/format";
 
 type GapDialogProps = {
   jobId: number;
@@ -27,6 +29,9 @@ type GapDialogProps = {
   name: string;
   // Profile skills with similar names, for "Is this the same as …?".
   suggestions: { id: number; name: string }[];
+  // The skills inside the gap's phrase, to tick (lib/skills/candidates.ts).
+  // Empty when the phrase has no skill-like part: then it's the whole name.
+  candidates: SkillCandidate[];
   // Existing skill categories, suggested in the category field.
   categories: string[];
 };
@@ -65,7 +70,16 @@ export function GapDialog(props: GapDialogProps) {
 
 const initialState: FormState = { status: "idle" };
 
-function GapForms({ jobId, name, suggestions, categories, onDone }: GapDialogProps & { onDone: () => void }) {
+function GapForms({ jobId, name, suggestions, candidates, categories, onDone }: GapDialogProps & { onDone: () => void }) {
+  // With no skills found in the phrase, the phrase itself is the one
+  // choice, ticked; otherwise nothing is ticked until you pick.
+  const choices: SkillCandidate[] = candidates.length > 0 ? candidates : [{ name, inProfile: false }];
+  const [ticked, setTicked] = useState<string[]>(candidates.length > 0 ? [] : [name]);
+  const [other, setOther] = useState("");
+  const names = [...new Set([...ticked, other.trim()])].filter(Boolean);
+  const toggle = (choice: string) =>
+    setTicked((current) => (current.includes(choice) ? current.filter((n) => n !== choice) : [...current, choice]));
+
   const [state, formAction, pending] = useActionState(
     async (prevState: FormState, formData: FormData) => {
       const next = await confirmGapAction(prevState, formData);
@@ -83,6 +97,9 @@ function GapForms({ jobId, name, suggestions, categories, onDone }: GapDialogPro
       <input type="hidden" name="jobId" value={jobId} />
     </>
   );
+  // The ticked names, one field each, for both "add" and "learning": the
+  // checklist sits outside the two forms, so each form carries a copy.
+  const nameFields = names.map((n) => <input key={n} type="hidden" name="names" value={n} />);
 
   return (
     <div className="space-y-5">
@@ -106,10 +123,36 @@ function GapForms({ jobId, name, suggestions, categories, onDone }: GapDialogPro
         </Section>
       )}
 
-      <Section title="Add it as a skill">
+      <Section title={candidates.length > 0 ? "Which of these do you have?" : "Add it as a skill"}>
+        <ul className="space-y-1.5">
+          {choices.map((choice) => (
+            <li key={choice.name}>
+              <label className="flex cursor-pointer items-center gap-2 text-sm has-disabled:cursor-default">
+                <input
+                  type="checkbox"
+                  checked={choice.inProfile || ticked.includes(choice.name)}
+                  onChange={() => toggle(choice.name)}
+                  disabled={choice.inProfile || pending}
+                />
+                {choice.name}
+                {choice.inProfile && <span className="text-xs text-muted-foreground">· in your profile</span>}
+              </label>
+            </li>
+          ))}
+        </ul>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-other`}>Another name (optional)</Label>
+          <Input
+            id={`${prefix}-other`}
+            value={other}
+            onChange={(event) => setOther(event.target.value)}
+            maxLength={100}
+            placeholder="If it's called something else, or split differently"
+          />
+        </div>
         <form action={formAction} className="space-y-3">
           {hidden("skill")}
-          <input type="hidden" name="name" value={name} />
+          {nameFields}
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor={`${prefix}-category`}>Category</Label>
@@ -148,10 +191,11 @@ function GapForms({ jobId, name, suggestions, categories, onDone }: GapDialogPro
             <Textarea id={`${prefix}-note`} name="note" rows={2} maxLength={500} />
             <p className="text-xs text-muted-foreground">
               Without this, tailoring can list the skill but not claim it in a summary or bullet.
+              {names.length > 1 && " The details here apply to every skill you ticked."}
             </p>
           </div>
-          <Button type="submit" disabled={pending}>
-            {pending ? "Saving..." : "Add skill"}
+          <Button type="submit" disabled={pending || names.length === 0}>
+            {pending ? "Saving..." : names.length > 1 ? `Add ${plural(names.length, "skill")}` : "Add skill"}
           </Button>
         </form>
       </Section>
@@ -159,9 +203,9 @@ function GapForms({ jobId, name, suggestions, categories, onDone }: GapDialogPro
       <Section title="Not yet?">
         <form action={formAction}>
           {hidden("learning")}
-          <input type="hidden" name="name" value={name} />
-          <Button type="submit" variant="outline" size="sm" disabled={pending}>
-            No, but I&apos;m learning it
+          {nameFields}
+          <Button type="submit" variant="outline" size="sm" disabled={pending || names.length === 0}>
+            {names.length > 1 ? "No, but I'm learning these" : "No, but I'm learning it"}
           </Button>
         </form>
         <p className="text-xs text-muted-foreground">

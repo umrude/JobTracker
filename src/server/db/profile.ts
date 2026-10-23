@@ -304,23 +304,39 @@ export async function confirmGap(input: ConfirmGapInput): Promise<WriteResult> {
       return { ok: true };
     }
 
-    // "skill" or "learning": a new skill sourced from this gap.
-    const existing = findNameClash(tx, userId, input.name);
-    if (existing) return clash(existing);
-    tx.insert(profileSkills)
-      .values({
-        userId,
-        name: input.name,
-        nameKey: skillKey(input.name),
-        category: input.category ?? null,
-        proficiency: input.mode === "learning" ? "learning" : (input.proficiency ?? null),
-        experience: input.mode === "skill" ? (input.experience ?? null) : null,
-        note: input.mode === "skill" ? (input.note ?? null) : null,
-        source: "gap",
-        sourceJobId: job.id,
-        sortOrder: nextSortOrder(tx, profileSkills, userId),
-      })
-      .run();
+    // "skill" or "learning": a new skill per ticked name, sourced from this
+    // gap, all with the same details. A name that's already in your profile
+    // (or repeats an earlier one) is skipped; it's an error only when every
+    // name was.
+    const clashes: string[] = [];
+    let added = 0;
+    for (const name of input.names) {
+      const existing = findNameClash(tx, userId, name);
+      if (existing) {
+        clashes.push(existing);
+        continue;
+      }
+      tx.insert(profileSkills)
+        .values({
+          userId,
+          name,
+          nameKey: skillKey(name),
+          category: input.category ?? null,
+          proficiency: input.mode === "learning" ? "learning" : (input.proficiency ?? null),
+          experience: input.mode === "skill" ? (input.experience ?? null) : null,
+          note: input.mode === "skill" ? (input.note ?? null) : null,
+          source: "gap",
+          sourceJobId: job.id,
+          sortOrder: nextSortOrder(tx, profileSkills, userId),
+        })
+        .run();
+      added++;
+    }
+    if (added === 0) {
+      return clashes.length === 1
+        ? clash(clashes[0])
+        : { ok: false, field: "names", message: "Those are all in your profile already." };
+    }
     return { ok: true };
   });
 }

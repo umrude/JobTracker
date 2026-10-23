@@ -80,6 +80,10 @@ export async function moveToAppliedAction(
 
   const { id } = savedJobIdSchema.parse({ id: formData.get("id") });
   const result = await moveSavedJobToApplied(id, new Date());
+  // The comparison and Prepare application pages show the job's status
+  // (or this button), whichever way it went.
+  revalidatePath(`/compare/${id}`);
+  revalidatePath(`/apply/${id}`);
   if (!result.ok) {
     revalidatePath("/saved");
     return formError(
@@ -90,8 +94,11 @@ export async function moveToAppliedAction(
   }
 
   // Both pages show this job (it leaves one and joins the other).
-  // Revalidate before redirect(): redirect() throws, so nothing after it runs.
   revalidatePath("/saved");
   revalidatePath("/board");
+  // From the comparison or Prepare application page you stay put (you may
+  // still want the cover letter); the page re-renders with the status.
+  if (formData.get("stay") === "true") return { status: "success" };
+  // Revalidate before redirect(): redirect() throws, so nothing after it runs.
   redirect("/board");
 }

@@ -38,7 +38,10 @@ export async function confirmGapAction(_prevState: FormState, formData: FormData
   await requireSession();
   assertWritable();
 
-  const parsed = confirmGapSchema.safeParse(Object.fromEntries(formData));
+  // `names` repeats (one field per ticked skill), and Object.fromEntries
+  // would keep only the last, so it's read with getAll. Modes without it
+  // drop the empty list when parsing.
+  const parsed = confirmGapSchema.safeParse({ ...Object.fromEntries(formData), names: formData.getAll("names") });
   if (!parsed.success) return validationError(parsed.error);
 
   const result = await confirmGap(parsed.data);

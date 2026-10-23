@@ -90,22 +90,26 @@ export const profileItemIdSchema = z.object({ id: idSchema });
 // validates exactly the fields it uses. jobId is the job whose comparison
 // showed the gap; it's recorded as the item's source.
 const gapName = z.string().trim().min(1, "Name is required").max(100, "Name must be 100 characters or fewer");
+// The skills ticked in the dialog: a gap phrase often names several
+// ("cloud infrastructure (AWS, Azure, Google Cloud)"), and you may have
+// only some of them. Sent as repeated `names` fields.
+const gapNames = z.array(gapName).min(1, "Pick at least one skill").max(12, "Pick 12 skills or fewer");
 
 export const confirmGapSchema = z.discriminatedUnion("mode", [
   // "Yes, it's the same as <skill>": the gap's name becomes an alias.
   z.object({ mode: z.literal("alias"), jobId: idSchema, name: gapName, skillId: idSchema }),
-  // "Add it as a skill".
+  // "Add them as skills": every ticked name, with the same details.
   z.object({
     mode: z.literal("skill"),
     jobId: idSchema,
-    name: gapName,
+    names: gapNames,
     category: skillFields.category,
     proficiency: skillFields.proficiency,
     experience: skillFields.experience,
     note: skillFields.note,
   }),
-  // "No, but I'm learning it".
-  z.object({ mode: z.literal("learning"), jobId: idSchema, name: gapName, category: skillFields.category }),
+  // "No, but I'm learning these".
+  z.object({ mode: z.literal("learning"), jobId: idSchema, names: gapNames, category: skillFields.category }),
   // "Add it as a highlight", for gaps that aren't skills ("5+ years of experience").
   z.object({ mode: z.literal("highlight"), jobId: idSchema, text: highlightText }),
 ]);

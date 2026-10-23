@@ -385,13 +385,26 @@ Aliases decide you *have* a skill; they don't change what an applicant tracking 
 |---|---|
 | **In profile** | You have it (by name, alias, or a built-in alias), just not on this resume. "AWS ECS" is in profile if your profile has "ECS". |
 | **Learning** | In your profile at the Learning level. |
+| **AWS, Azure in profile** | Some of the skills inside the phrase are in your profile, but not the phrase as a whole. The "I have this" button is still offered for the rest. |
 | **I have this** button | Not in your profile. Shown only where writes are allowed. |
+
+#### Gaps that name several skills
+
+A listing often writes a gap as a sentence: "Expertise in managing cloud infrastructure (AWS, Azure, Google Cloud)". You might have AWS and Azure but not Google Cloud, and adding the whole sentence as one skill helps nobody. So `skillCandidates` (`lib/skills/candidates.ts`, pure and unit-tested) splits the phrase into the skills inside it. That example gives "cloud infrastructure", "AWS", "Azure" and "Google Cloud". The dialog lists them as checkboxes:
+
+- **How it splits:** it drops leading filler ("Expertise in managing", "Scripting in"), splits on commas, parentheses, "and", "or", "using", "including", and keeps short parts (up to four words). It skips asides like "(asset)" and lone lowercase words. Known skills the resolver finds that the split missed are added under their canonical names. It offers at most eight.
+- **The listing's wording is kept** ("AWS", not "Amazon Web Services"), since that's what the keyword check looks for.
+- **Ones already in your profile** are shown ticked and disabled. When every skill inside the phrase is in your profile ("Leaflet" of "Leaflet maps"), the whole phrase stays as a choice, since it may mean more.
+- **Another name** is a free-text box, for a skill the split got wrong.
+- **No skill-like parts** ("5+ years in increasingly senior roles"): the whole phrase is the only choice, ticked. The highlight answer suits these better.
+
+"Add skills" and "I'm learning these" add every ticked name, each as its own profile skill with the same details. A name that's already in your profile is skipped. It's an error only if every name was.
 
 "I have this" opens a dialog with four answers, all posting to one action and validated by one Zod **discriminated union** on `mode`, so each answer checks exactly the fields it uses:
 
 - **"Same as <skill>"** (offered when a profile skill has a similar name, e.g. "Leaflet" for "Leaflet maps"): the gap's name becomes an alias of that skill. You decide, because a similar name can be a different skill.
-- **Add as a skill**, with category, levels, and an optional "where did you use it?".
-- **"No, but I'm learning it"**: a skill at the Learning level.
+- **Add as a skill** (one per ticked name), with category, levels, and an optional "where did you use it?".
+- **"No, but I'm learning it"** (or "these"): a skill at the Learning level for each ticked name.
 - **Add as a highlight**, for gaps that aren't skills ("5+ years of experience").
 
 Every answer is recorded with `source = "gap"` and the job that prompted it. The data layer checks the job (and, for an alias, the skill) belongs to you rather than trusting the form, applies the same name-clash rules as the Profile page, and the isolation tests cover all of it.
@@ -508,6 +521,8 @@ The seed creates a Northwind draft through the same resolver and checker, so the
 ### Step 5c: review, approve, and the PDF
 
 Code: `src/lib/tailoring/changes.ts` and `approve.ts` (the logic), the service functions in `src/server/tailoring.ts`, the page at `src/app/(dashboard)/apply/[jobId]/`, and the PDF route `src/app/api/tailored/[id]/pdf/`. The page is reached from **Prepare application** on a comparison.
+
+Both this page and the comparison show where the job stands under the title. Once you've applied, that's its status pill, which links to the board. While it's still a saved job, it's **Move to Applied**, the same action as on the Saved jobs page. From these pages it keeps you where you are rather than redirecting to the board, since you may still want the cover letter, and the page re-renders with the new status.
 
 #### From a proposal to a list of changes
 
