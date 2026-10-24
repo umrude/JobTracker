@@ -43,6 +43,7 @@ const gmailDal = await import("@/server/db/gmail-connections");
 const emailEventsDal = await import("@/server/db/email-events");
 const { insertEmailEvent } = await import("@/server/db/email-event-store");
 const { backfillStatusHistory } = await import("@/server/db/status-history-store");
+const todayDal = await import("@/server/db/today");
 
 const DEMO_TEX = fs.readFileSync(
   path.join(process.cwd(), "src/server/db/fixtures/demo-resume.tex"),
@@ -847,5 +848,73 @@ describe("an application's emails", () => {
     insertEmailEvent(testDb, BOB, { source: "email", gmailMessageId: "b1", subject: "Bob's", applicationId: app.id });
     as(ALICE);
     expect(await emailEventsDal.listEmailsForApplication(app.id)).toHaveLength(2);
+  });
+});
+
+describe("today: interviews, follow-ups, activity", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const interview = (applicationId: number, at: Date) => ({
+    applicationId,
+    at,
+    durationMinutes: 45,
+    kind: "technical" as const,
+    location: "Video call",
+    notes: undefined,
+  });
+
+  it("adds, lists, reads, and deletes interviews for your own applications only", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "interviewing" });
+    const soon = new Date(Date.now() + 2 * DAY);
+    expect((await todayDal.addInterview(interview(app.id, soon))).ok).toBe(true);
+    const [added] = await todayDal.listInterviews(app.id);
+    expect(added).toMatchObject({ kind: "technical", durationMinutes: 45 });
+    expect(await todayDal.getInterview(added.id)).toMatchObject({ company: "Acme", title: "Engineer" });
+    expect((await todayDal.loadToday()).interviews.map((i) => i.id)).toEqual([added.id]);
+
+    as(BOB);
+    // Bob can't add one to Alice's application, see hers, or delete it.
+    expect((await todayDal.addInterview(interview(app.id, soon))).ok).toBe(false);
+    expect(await todayDal.listInterviews(app.id)).toEqual([]);
+    expect(await todayDal.getInterview(added.id)).toBeUndefined();
+    expect((await todayDal.loadToday()).interviews).toEqual([]);
+    expect((await todayDal.removeInterview(added.id)).ok).toBe(false);
+
+    as(ALICE);
+    expect((await todayDal.removeInterview(added.id)).ok).toBe(true);
+    expect(await todayDal.listInterviews(app.id)).toEqual([]);
+  });
+
+  it("nudges your own quiet applications, and only you can mark them followed up", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied" });
+    const later = new Date(Date.now() + 12 * DAY);
+    expect((await todayDal.loadToday(later)).followUps.map((f) => f.applicationId)).toEqual([app.id]);
+    expect(await todayDal.countToday(later)).toBe(1);
+
+    as(BOB);
+    expect((await todayDal.loadToday(later)).followUps).toEqual([]);
+    expect(await todayDal.countToday(later)).toBe(0);
+    expect((await todayDal.followedUp(app.id, later)).ok).toBe(false);
+
+    as(ALICE);
+    expect((await todayDal.followedUp(app.id, later)).ok).toBe(true);
+    expect((await todayDal.loadToday(later)).followUps).toEqual([]);
+  });
+
+  it("shows only your own recent activity", async () => {
+    as(ALICE);
+    await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied" });
+    expect((await todayDal.loadToday()).activity.map((a) => a.company)).toEqual(["Acme"]);
+    as(BOB);
+    expect((await todayDal.loadToday()).activity).toEqual([]);
+  });
+
+  it("deletes an application's interviews with it", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "interviewing" });
+    await todayDal.addInterview(interview(app.id, new Date(Date.now() + DAY)));
+    await applicationsDal.deleteApplication(app.id);
+    expect(testDb.select().from(schema.interviews).all()).toEqual([]);
   });
 });

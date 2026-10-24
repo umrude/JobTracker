@@ -8,12 +8,13 @@ Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It r
 
 **[Try the live demo →](https://job-tracker-demo-f7ye.onrender.com/)** It's read-only, with a fake person, resume, and inbox. It's on a free host that sleeps when idle, so the first visit can take up to a minute.
 
-![A tour of the demo: searching for a company, its comparison, the tailored resume review with its honesty check, then dark mode](docs/screenshots/demo.gif)
+![A tour of the demo: Today, searching for a company, its comparison, the tailored resume review with its honesty check, dark mode, and an application's history](docs/screenshots/demo.gif)
 
 ## What it does
 
+- **Today.** Where the app opens: upcoming interviews (with a calendar file for each), applications worth a follow-up after 10 quiet days, what's waiting in the Inbox, and the last week's changes.
 - **Board.** Applications by status (Applied, Acknowledged, Interviewing, Offer, Rejected, Ghosted), with drag and drop, search, and a filter.
-- **Application pages.** Each application's history: every status it's had, when, and what moved it (a drag, a confirmed email, the ghosted rule). Its page also lists the emails about it, and links to its comparison and tailored resume.
+- **Application pages.** Each application's history: every status it's had, when, and what moved it (a drag, a confirmed email, the ghosted rule). Its page also lists the emails about it and its interviews, and links to its comparison and tailored resume.
 - **Saved jobs.** Paste a listing to apply to later, then move it to the board when you apply.
 - **Resume comparison.** Scores your resume against a listing and lists matched skills, gaps, and missing keywords. When a gap is something you do have, "I have this" adds it to your profile.
 - **Tailored resumes.** The model picks, orders, and lightly rewords content from your profile for one listing. Code checks the result, you review every change, and the approved version is compiled from your LaTeX source to a one-page PDF.
@@ -21,19 +22,17 @@ Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It r
 - **Gmail sync.** Finds application emails (confirmations, interviews, rejections) and suggests status changes in a review inbox. Nothing on the board moves until you confirm it.
 - **Insights.** Which skills your listings ask for most often that your resume doesn't show, and how that lines up with outcomes. It reports counts, never causes.
 
-| Comparison | Tailored resume review |
+| Today | Application page |
 |---|---|
+| ![Today: upcoming interviews, follow-up nudges, and the last 7 days](docs/screenshots/today.png) | ![An application's page: its status history as a timeline, and the emails about it](docs/screenshots/application.png) |
+| **Comparison** | **Tailored resume review** |
 | ![A comparison: match score, skills you have, gaps, and missing keywords](docs/screenshots/comparison.png) | ![Reviewing a tailored resume change by change, with a change the honesty check reverted](docs/screenshots/tailored-resume.png) |
 | **Inbox review** | **Insights** |
 | ![Suggestions from email, each waiting for confirmation](docs/screenshots/inbox.png) | ![Skill gaps across listings, with outcome counts](docs/screenshots/insights.png) |
-| **Application page** | **Board** |
-| ![An application's page: its status history as a timeline, and the emails about it](docs/screenshots/application.png) | ![The board, with applications grouped by status](docs/screenshots/board.png) |
-| **Dark mode** | |
-| ![The board in dark mode](docs/screenshots/board-dark.png) | |
+| **Board** | **Dark mode** |
+| ![The board, with applications grouped by status](docs/screenshots/board.png) | ![The board in dark mode](docs/screenshots/board-dark.png) |
 
 ## Highlights
-
-The parts I'd point a reviewer to:
 
 - **The model can't make things up on your resume, and code checks it.** "Don't invent anything" is in the prompt, but the prompt isn't relied on. Every skill must exist in your profile, bullets are referenced by ID, and a reworded bullet can't add a skill or a number its original didn't have. That last rule also keeps personal-project skills out of job bullets. Learning skills never appear on the resume. Anything that fails is reverted and shown to you (the yellow box in the screenshot above). Model text is escaped before it goes into LaTeX, and Tectonic compiles offline with risky TeX features turned off. ([docs/tailored-resumes.md](docs/tailored-resumes.md))
 - **A demo mode that never calls an external service.** One function, `getMode()`, decides live or demo. Demo mode uses a seeded database with a fake person and resume, sample emails instead of Gmail, saved model answers instead of the Anthropic API, and pre-built PDFs. The public demo is read-only, enforced on the server by `assertWritable()` in every write, not just by disabling buttons.
@@ -92,8 +91,8 @@ flowchart LR
 ```
 src/
   app/
-    (dashboard)/   board, saved, compare, apply, inbox-review, insights, resume, profile
-    api/           Gmail sync, OAuth callback, search, PDF routes
+    (dashboard)/   today, board, applications, saved, compare, apply, inbox-review, insights, resume, profile
+    api/           Gmail sync, OAuth callback, search, PDF and calendar routes
   server/          server-only: data layer, model calls, Gmail, LaTeX, getMode()
     db/            Drizzle schema, migrations, seed, isolation tests
   lib/             pure logic and Zod schemas, shared by server and client
@@ -120,6 +119,7 @@ The main choices and the reasons for them. Each doc has more detail.
 | **Store the text, never the uploaded file** | Resumes are parsed to text on upload. Email bodies are read from Gmail when needed and never stored. Less personal data sitting on disk. |
 | **Comparisons score the resume as written** | That's what an applicant tracking system sees. Your profile and tailored versions are shown separately, with a note that the tailored one was written toward the listing. |
 | **Insights shows counts, not causes** | With a few dozen applications, any "this skill got you rejected" claim would be noise. Small samples are labeled "too few to compare". ([insights](docs/insights.md)) |
+| **Interviews are entered by hand, with calendar files** | Most interview emails ask for availability rather than naming a time, so reading dates out of them would be unreliable and cost more model calls. An `.ics` download works with any calendar, with no extra Google permissions. ([today](docs/today.md)) |
 | **Search is a GET route, not a Server Action** | Server Actions run one at a time, so a search per keystroke would queue up. A GET route can run in parallel and be cancelled. ([search](docs/search.md)) |
 | **Client Components get only what they render** | Everything passed to a Client Component is sent to the browser. Lists send summaries, and details load when a dialog opens. ([performance](docs/performance.md)) |
 
@@ -183,7 +183,7 @@ CI runs the end-to-end tests against this exact build. To check the deployed dem
 
 ## Testing
 
-About 490 unit tests run with Vitest, and none of them call the real Anthropic API or Gmail. They cover:
+About 550 unit tests run with Vitest, and none of them call the real Anthropic API or Gmail. They cover:
 
 - **Pure logic, tested directly:** the email pre-filter and matching, status transitions, honesty checks, the LaTeX scanner, search ranking, and insights.
 - **Model functions:** run against a mocked client, including malformed output, the single retry, and the error that follows.
@@ -203,6 +203,7 @@ About 490 unit tests run with Vitest, and none of them call the real Anthropic A
 | [cover-letters.md](docs/cover-letters.md) | Cover letter options, versions, and honesty warnings |
 | [gmail-sync.md](docs/gmail-sync.md) | OAuth, token storage, sync, pre-filter, matching, classifier and its eval |
 | [status-history.md](docs/status-history.md) | Every status change and when, how older applications are reconstructed, and the application page |
+| [today.md](docs/today.md) | Today: follow-up nudges, interviews and calendar files, the week's activity |
 | [insights.md](docs/insights.md) | What's counted, outcome groups, small samples |
 | [multi-user.md](docs/multi-user.md) | Ownership design and what opening sign-up would take |
 | [search.md](docs/search.md) | Ranking and snippets |

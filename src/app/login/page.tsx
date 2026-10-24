@@ -15,12 +15,12 @@ const FEATURES = [
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   // Nothing to log into in a demo deployment: there's no session to have.
   if (isPublicDemo()) {
-    redirect("/board");
+    redirect("/today");
   }
 
   const session = await auth();
   if (session?.user) {
-    redirect("/board");
+    redirect("/today");
   }
 
   const { error } = await searchParams;
@@ -55,7 +55,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <form
           action={async () => {
             "use server";
-            await signIn("google", { redirectTo: "/board" });
+            await signIn("google", { redirectTo: "/today" });
           }}
         >
           <Button type="submit" size="lg" className="w-full">

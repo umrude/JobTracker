@@ -41,7 +41,7 @@ Light, dark, or follow the system, with the toggle in the header (and on the sig
 
 `app/(dashboard)/layout.tsx`:
 
-- **Sidebar** (wide screens): the logo, nav grouped as Job search (Board, Saved jobs, Compare, Inbox with its count, Insights) and You (Resume, Profile), and the demo controls at the bottom.
+- **Sidebar** (wide screens): the logo, nav grouped as Job search (Today with its count, Board, Saved jobs, Compare, Inbox with its count, Insights) and You (Resume, Profile), and the demo controls at the bottom.
 - **Collapsing the sidebar:** "Collapse" at the bottom shrinks it to icons. Each link keeps its name as a tooltip and for screen readers, and the Inbox count sits on its icon.
   - **Remembered in a cookie** (`sidebar-collapsed`), not localStorage. The layout is a Server Component and can read a cookie, so the first paint already has the right width, with no flash and no hydration mismatch.
   - **Only the toggle is client code.** `sidebar.tsx` is a small Client Component holding the state. Everything inside it is rendered by the layout and passed in as children, and adapts through CSS: the sidebar sets `data-collapsed`, and its contents use the `group-data-[collapsed=true]/sidebar:` variant (for example, `sr-only` on labels).

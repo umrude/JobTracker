@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, BadgeCheckIcon, ExternalLinkIcon, FileTextIcon, GitCompareArrowsIcon, PencilIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusPill } from "@/components/status-pill";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { requireSession } from "@/server/require-session";
@@ -16,6 +16,9 @@ import { EMAIL_TYPE_LABELS } from "@/lib/schemas/email";
 import { formatDate, plural } from "@/lib/format";
 import { ApplicationForm } from "../../board/_components/application-form";
 import { Timeline } from "../_components/timeline";
+import { InterviewList } from "../_components/interview-list";
+import { AddInterviewDialog } from "../_components/add-interview-dialog";
+import { listInterviews } from "@/server/db/today";
 
 // One application, everything about it in one place: where it stands, how
 // it got there (the status history, docs/status-history.md), the emails
@@ -33,12 +36,14 @@ export default async function ApplicationPage({ params }: PageProps<"/applicatio
   const application = await getApplicationDetails(parsedId.data);
   if (!application) notFound();
 
-  const [history, emails, comparison] = await Promise.all([
+  const [history, emails, comparison, interviews] = await Promise.all([
     getStatusHistory(application.id),
     listEmailsForApplication(application.id),
     getLatestComparison(application.jobId),
+    listInterviews(application.id),
   ]);
   const writable = isWritable();
+  const now = new Date();
   const score = comparison?.status === "ok" ? comparison.comparison.score : null;
 
   return (
@@ -73,6 +78,7 @@ export default async function ApplicationPage({ params }: PageProps<"/applicatio
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <StatusPill status={application.status} />
               {application.appliedAt && <span>Applied {formatDate(application.appliedAt)}</span>}
+              {application.followedUpAt && <span>Followed up {formatDate(application.followedUpAt)}</span>}
               {application.passedScreening && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-800 dark:text-emerald-300">
                   <BadgeCheckIcon className="size-3" />
@@ -141,6 +147,18 @@ export default async function ApplicationPage({ params }: PageProps<"/applicatio
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Interviews</CardTitle>
+              <CardAction>
+                <AddInterviewDialog applicationId={application.id} disabled={!writable} />
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <InterviewList interviews={interviews} now={now} writable={writable} />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Notes</CardTitle>

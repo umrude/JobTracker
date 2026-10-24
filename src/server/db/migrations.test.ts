@@ -127,6 +127,13 @@ describe("migrations 0012 and 0013", () => {
     expect(onDelete).toEqual({ user_id: "CASCADE", application_id: "CASCADE", email_event_id: "SET NULL" });
   });
 
+  it("0016 ties interviews to their application and owner", () => {
+    const sqlite = new Database(":memory:");
+    migrate(drizzle(sqlite), { migrationsFolder: MIGRATIONS });
+    const foreignKeys = sqlite.prepare("pragma foreign_key_list(interviews)").all() as { from: string; on_delete: string }[];
+    expect(Object.fromEntries(foreignKeys.map((fk) => [fk.from, fk.on_delete]))).toEqual({ user_id: "CASCADE", application_id: "CASCADE" });
+  });
+
   it("0014 links a revision to its draft with ON DELETE set null", () => {
     const sqlite = new Database(":memory:");
     migrate(drizzle(sqlite), { migrationsFolder: MIGRATIONS });

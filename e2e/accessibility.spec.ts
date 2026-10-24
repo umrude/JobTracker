@@ -6,6 +6,7 @@ import { devices, expect, test, type Page } from "@playwright/test";
 // mechanically (contrast, names, roles, landmarks, headings); keyboard use
 // and screen-reader wording are covered in docs/accessibility.md.
 const PAGES = [
+  "/today",
   "/board",
   "/saved",
   "/compare",

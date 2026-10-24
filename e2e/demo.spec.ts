@@ -4,6 +4,24 @@ import { expect, test } from "@playwright/test";
 // demo is read-only and seeded with fake data (src/server/db/seed.ts), so
 // these tests can name seeded companies and expect them to be there.
 
+test("the app opens on Today: interviews, follow-ups, and the week", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+
+  await expect(page.getByRole("link", { name: "Technical: QA Automation Engineer at Marrow Biotech" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Backend Engineer (Node.js) at Cobalt Harbor" })).toBeVisible();
+  // Read-only demo: the nudge is shown, but following up is disabled.
+  await expect(page.getByRole("button", { name: "I followed up" }).first()).toBeDisabled();
+
+  // Each interview downloads as a calendar file.
+  const href = await page.getByRole("link", { name: "Add to calendar: the interview with Marrow Biotech" }).getAttribute("href");
+  const ics = await request.get(href ?? "");
+  expect(ics.status()).toBe(200);
+  expect(ics.headers()["content-type"]).toContain("text/calendar");
+  expect(await ics.text()).toContain("SUMMARY:Technical: QA Automation Engineer at Marrow Biotech");
+});
+
 test("the board shows seeded applications and filters them", async ({ page }) => {
   await page.goto("/board");
   await expect(page.getByRole("heading", { name: "Applications" })).toBeVisible();
@@ -24,10 +42,10 @@ test("the demo is read-only and has no sign-in", async ({ page, request }) => {
   const sync = await request.post("/api/sync");
   expect(sync.status()).toBe(403);
   expect(await sync.json()).toMatchObject({ ok: false });
-  // Nothing to sign in to: the login page sends you to the board, and the
+  // Nothing to sign in to: the login page sends you to Today, and the
   // auth routes don't exist (the demo has no AUTH_SECRET).
   await page.goto("/login");
-  await expect(page).toHaveURL(/\/board$/);
+  await expect(page).toHaveURL(/\/today$/);
   expect((await request.get("/api/auth/session")).status()).toBe(404);
 });
 

@@ -40,6 +40,8 @@ import { demoClassification, DEMO_CLASSIFIER_MODEL } from "@/server/llm/classify
 import { backfillStatusHistory, recordCreation, recordStatusChange } from "@/server/db/status-history-store";
 import type { EmailType } from "@/lib/schemas/email";
 import { GHOSTED_AFTER_DAYS } from "@/lib/email/ghosted";
+import type { InterviewKind } from "@/lib/schemas/interview";
+import { insertInterview } from "@/server/db/today-store";
 
 const UNCOMPARED_SEED_JOB_URL = "https://pebblebrookhealth.example/careers/4410";
 // Gets a tailored resume draft in the seed, so the read-only public demo
@@ -91,6 +93,10 @@ type SeedApplication = SeedJob & {
   // (docs/status-history.md). Without one, the history is reconstructed
   // like any older application's. The last step must reach `status`.
   history?: SeedStep[];
+  // Interviews, dated from today (the demo reseeds on every start, so
+  // upcoming ones stay upcoming): days from now (negative for past ones),
+  // at a local hour.
+  interviews?: { inDays: number; hour: number; kind: InterviewKind; durationMinutes: number; location: string; notes?: string }[];
 };
 
 // One step in a seeded application's history. An email step also seeds the
@@ -378,6 +384,16 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
       // After a recruiter call.
       { to: "interviewing", daysAgo: 9, via: "board" },
     ],
+    interviews: [
+      {
+        inDays: 2,
+        hour: 10,
+        kind: "technical",
+        durationMinutes: 90,
+        location: "Video call (link in the invite)",
+        notes: "Take-home walkthrough, then a live test-automation exercise.",
+      },
+    ],
   },
   {
     company: "Solstice Interactive",
@@ -399,6 +415,17 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
         fromName: "Dana Kim",
         fromAddress: "dana.kim@solstice.example",
         snippet: "We'd like to invite you to a technical interview with the iOS team. Here are a few times that work for us.",
+      },
+    ],
+    interviews: [
+      { inDays: -6, hour: 15, kind: "phone_screen", durationMinutes: 30, location: "Phone" },
+      {
+        inDays: 1,
+        hour: 9,
+        kind: "technical",
+        durationMinutes: 60,
+        location: "Video call",
+        notes: "Rescheduled from Monday. iOS architecture and a SwiftUI pairing exercise.",
       },
     ],
   },
@@ -436,6 +463,10 @@ export const SEED_APPLICATIONS: SeedApplication[] = [
       },
       // A verbal offer on a call, before the letter (in the Inbox) arrived.
       { to: "offer", daysAgo: 6, via: "board" },
+    ],
+    interviews: [
+      { inDays: -28, hour: 11, kind: "phone_screen", durationMinutes: 30, location: "Phone" },
+      { inDays: -14, hour: 13, kind: "final", durationMinutes: 180, location: "Hearthstone HQ, 400 Dock St" },
     ],
   },
   {
@@ -935,6 +966,19 @@ export async function seedDemoDatabase(dbPath: string = DEMO_DB_PATH): Promise<n
       .returning({ id: schema.applications.id })
       .get();
     if (seedApp.history) withHistory.push({ seedApp, applicationId: application.id });
+    for (const interview of seedApp.interviews ?? []) {
+      const at = new Date();
+      at.setDate(at.getDate() + interview.inDays);
+      at.setHours(interview.hour, 0, 0, 0);
+      insertInterview(db, demoUser.id, {
+        applicationId: application.id,
+        at,
+        durationMinutes: interview.durationMinutes,
+        kind: interview.kind,
+        location: interview.location,
+        notes: interview.notes,
+      });
+    }
   }
 
   // Older applications with comparisons, for the Insights page.

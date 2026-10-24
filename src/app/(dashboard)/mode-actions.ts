@@ -21,5 +21,5 @@ export async function toggleDemoModeAction() {
     cookieStore.set(DEMO_MODE_COOKIE, "true", { path: "/" });
   }
 
-  redirect("/board");
+  redirect("/today");
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookmarkIcon,
+  CalendarCheckIcon,
   ChartColumnIcon,
   FileTextIcon,
   GitCompareArrowsIcon,
@@ -21,6 +22,7 @@ const GROUPS: { label: string; links: NavLink[] }[] = [
   {
     label: "Job search",
     links: [
+      { href: "/today", label: "Today", Icon: CalendarCheckIcon },
       { href: "/board", label: "Board", Icon: KanbanSquareIcon },
       { href: "/saved", label: "Saved jobs", Icon: BookmarkIcon },
       { href: "/compare", label: "Compare", Icon: GitCompareArrowsIcon },
@@ -41,7 +43,17 @@ const GROUPS: { label: string; links: NavLink[] }[] = [
 // needs usePathname(). The layout around it stays a Server Component.
 // "sidebar": grouped and vertical (wide screens); "bar": one scrollable
 // row under the header (small screens).
-export function NavLinks({ inboxCount, variant }: { inboxCount: number; variant: "sidebar" | "bar" }) {
+export function NavLinks({
+  inboxCount,
+  todayCount,
+  variant,
+}: {
+  inboxCount: number;
+  // Follow-ups due and interviews within a day (server/db/today.ts).
+  todayCount: number;
+  variant: "sidebar" | "bar";
+}) {
+  const countFor = (href: string) => (href === "/inbox-review" ? inboxCount : href === "/today" ? todayCount : 0);
   const pathname = usePathname();
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
@@ -62,9 +74,9 @@ export function NavLinks({ inboxCount, variant }: { inboxCount: number; variant:
       >
         <Icon className="size-[18px] shrink-0" />
         <span className="group-data-[collapsed=true]/sidebar:sr-only">{label}</span>
-        {href === "/inbox-review" && inboxCount > 0 && (
+        {countFor(href) > 0 && (
           <span className="ml-auto rounded-full bg-primary px-1.5 py-px text-[11px] leading-4 font-semibold text-primary-foreground tabular-nums group-data-[collapsed=true]/sidebar:absolute group-data-[collapsed=true]/sidebar:-top-0.5 group-data-[collapsed=true]/sidebar:right-0 group-data-[collapsed=true]/sidebar:px-1 group-data-[collapsed=true]/sidebar:text-[10px] group-data-[collapsed=true]/sidebar:leading-3.5">
-            {inboxCount}
+            {countFor(href)}
           </span>
         )}
       </Link>

@@ -7,6 +7,7 @@ import { auth, signOut } from "@/server/auth";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { gmailNeedsReconnect } from "@/server/db/gmail-connections";
 import { countPendingSuggestions } from "@/server/db/email-events";
+import { countToday } from "@/server/db/today";
 import { SearchBox } from "@/components/search-box";
 import { ThemeToggle } from "@/components/theme";
 import { Logo } from "@/components/logo";
@@ -39,6 +40,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const reconnectGmail = session?.user ? await gmailNeedsReconnect() : false;
   // The public demo has no session but does have suggestions to show.
   const inboxCount = session?.user || publicDemo ? await countPendingSuggestions() : 0;
+  const todayCount = session?.user || publicDemo ? await countToday() : 0;
   const email = session?.user?.email ?? null;
   const sidebarCollapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === "1";
 
@@ -57,7 +59,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <Logo nameClassName={COLLAPSED_SR_ONLY} />
         </div>
         <div className="flex-1 overflow-x-hidden overflow-y-auto px-3">
-          <NavLinks inboxCount={inboxCount} variant="sidebar" />
+          <NavLinks inboxCount={inboxCount} todayCount={todayCount} variant="sidebar" />
         </div>
         <div className="border-t p-3 pb-0 group-data-[collapsed=true]/sidebar:px-2">
           {publicDemo ? (
@@ -117,7 +119,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
         {/* A labelled section, so everything on the page sits in a landmark. */}
         <section aria-label="Menu" className="border-b bg-card md:hidden">
-          <NavLinks inboxCount={inboxCount} variant="bar" />
+          <NavLinks inboxCount={inboxCount} todayCount={todayCount} variant="bar" />
           <div className="flex items-center justify-between gap-2 px-4 pb-2 sm:justify-end">
             <ThemeToggle className="sm:hidden" />
             {!publicDemo && <DemoToggle inDemo={mode === "demo"} />}

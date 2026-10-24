@@ -16,7 +16,7 @@ export function Logo({
 }) {
   return (
     <Link
-      href="/board"
+      href="/today"
       aria-label={compact ? "Job Tracker" : undefined}
       className={cn("flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50", className)}
     >

@@ -109,3 +109,17 @@ export function stepGap(previous: Date | undefined, at: Date): string | null {
   const days = Math.floor((at.getTime() - previous.getTime()) / DAY);
   return days >= 1 ? `${plural(days, "day")} later` : null;
 }
+
+// The same, in a few words, for one-line lists (Today's "Last 7 days").
+export function stepOriginShort(source: StatusChangeSource): string {
+  switch (source) {
+    case "board":
+      return "on the board";
+    case "email":
+      return "from an email";
+    case "ghosted":
+      return "by the ghosted rule";
+    case "estimated":
+      return "date estimated";
+  }
+}

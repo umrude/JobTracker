@@ -76,11 +76,12 @@ async function scrollBy(page: Page, pixels: number, steps: number) {
   }
 }
 
-// The story: search, a comparison, the tailored resume with its honesty
-// check, then dark mode.
+// The story: Today, search, a comparison, the tailored resume with its
+// honesty check, dark mode, and an application's history.
 async function perform(page: Page) {
+  // Today, where the app opens.
   await page.mouse.move(700, 450);
-  await pause(page, 1500);
+  await pause(page, 2500);
 
   const search = page.getByRole("combobox", { name: "Search applications and saved jobs" });
   await clickOn(page, search);
@@ -105,15 +106,20 @@ async function perform(page: Page) {
   await pause(page, 1200);
   await clickOn(page, page.getByRole("link", { name: "Board" }).first());
   await page.getByRole("heading", { name: "Applications" }).waitFor();
-  await page.mouse.move(700, 500, { steps: 12 });
-  await pause(page, 1500);
+  await pause(page, 800);
+
+  // An application's page: how it got to Offer.
+  await clickOn(page, page.getByRole("link", { name: "Site Reliability Engineer" }));
+  await page.getByRole("heading", { level: 1, name: "Site Reliability Engineer" }).waitFor();
+  await page.mouse.move(900, 600, { steps: 12 });
+  await pause(page, 2500);
 }
 
 async function record(): Promise<RawFrame[]> {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: "light" });
-    await page.goto(`${BASE_URL}/board`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE_URL}/today`, { waitUntil: "networkidle" });
     await pause(page, 500);
     await page.evaluate(DECORATE_PAGE);
 

@@ -22,6 +22,7 @@ import {
 import { COVER_LENGTHS, COVER_TONES } from "@/lib/schemas/cover-letter";
 import { EMAIL_TYPES, MATCH_METHODS, SUGGESTION_SOURCES, SUGGESTION_STATES } from "@/lib/schemas/email";
 import { STATUS_CHANGE_SOURCES } from "@/lib/schemas/status-history";
+import { INTERVIEW_KINDS } from "@/lib/schemas/interview";
 
 // Accounts. The app is multi-user *ready*: every other table has a
 // user_id and every query filters by it, but sign-in is still limited to
@@ -81,6 +82,9 @@ export const applications = sqliteTable(
     // Offer, which imply it. Null means unknown, not "failed": you rarely
     // learn that an application didn't pass. See docs/insights.md.
     passedScreeningAt: integer("passed_screening_at", { mode: "timestamp" }),
+    // When you last followed up ("I followed up" on Today): quiet time
+    // for follow-up nudges counts from here too. See docs/today.md.
+    followedUpAt: integer("followed_up_at", { mode: "timestamp" }),
     notes: text("notes"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
@@ -355,6 +359,28 @@ export const statusEvents = sqliteTable(
       .default(sql`(unixepoch())`),
   },
   (table) => [index("status_events_user_application_idx").on(table.userId, table.applicationId, table.at)],
+);
+
+// Interviews you add to an application, for Today and calendar files.
+// Entered by hand (docs/today.md).
+export const interviews = sqliteTable(
+  "interviews",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: ownerColumn(),
+    applicationId: integer("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    at: integer("at", { mode: "timestamp" }).notNull(),
+    durationMinutes: integer("duration_minutes").notNull().default(60),
+    kind: text("kind", { enum: INTERVIEW_KINDS }).notNull(),
+    location: text("location"),
+    notes: text("notes"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [index("interviews_user_at_idx").on(table.userId, table.at)],
 );
 
 // A user's Gmail connection (gmail.readonly), at most one per user. Only

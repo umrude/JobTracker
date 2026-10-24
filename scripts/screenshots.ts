@@ -42,6 +42,7 @@ async function main() {
         theme === "dark"
           ? [{ name: "board-dark", route: "/board" }]
           : [
+              { name: "today", route: "/today" },
               { name: "board", route: "/board" },
               { name: "comparison", route: `/compare/${await showcaseJobId(page)}` },
               { name: "tailored-resume", route: `/apply/${await showcaseJobId(page)}` },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { creationChanges, reconstructHistory, stepGap, stepOrigin, stepTitle } from "@/lib/status-history";
+import { creationChanges, reconstructHistory, stepGap, stepOrigin, stepOriginShort, stepTitle } from "@/lib/status-history";
 
 const day = (n: number) => new Date(Date.UTC(2026, 8, n));
 
@@ -106,6 +106,15 @@ describe("timeline wording", () => {
     expect(step("email")).toBe("From an email");
     expect(step("ghosted")).toContain("Ghosted rule");
     expect(step("estimated")).toContain("estimated");
+  });
+
+  it("has a short form for one-line lists", () => {
+    expect(["board", "email", "ghosted", "estimated"].map((s) => stepOriginShort(s as "board"))).toEqual([
+      "on the board",
+      "from an email",
+      "by the ghosted rule",
+      "date estimated",
+    ]);
   });
 
   it("counts whole days since the step before, and nothing when it can't", () => {

@@ -58,6 +58,7 @@ export async function getApplicationDetails(id: number) {
       jobId: applications.jobId,
       status: applications.status,
       appliedAt: applications.appliedAt,
+      followedUpAt: applications.followedUpAt,
       notes: applications.notes,
       passedScreening: sql<number>`${applications.passedScreeningAt} is not null`.mapWith(Boolean),
       company: jobs.company,
