@@ -125,7 +125,7 @@ The main choices and the reasons for them. Each doc has more detail.
 
 ## Running it
 
-Requires Node.js 20+ and pnpm.
+Requires pnpm and a patched Node.js: 22.23.4+, 24.22.1+, or 26.12.1+ (the October 2026 security releases). CI and the hosted demo are pinned to 22.23.4.
 
 ### Demo mode (no accounts, keys, or `.env`)
 
