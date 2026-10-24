@@ -44,6 +44,7 @@ const emailEventsDal = await import("@/server/db/email-events");
 const { insertEmailEvent } = await import("@/server/db/email-event-store");
 const { backfillStatusHistory } = await import("@/server/db/status-history-store");
 const todayDal = await import("@/server/db/today");
+const insightsService = await import("@/server/insights");
 
 const DEMO_TEX = fs.readFileSync(
   path.join(process.cwd(), "src/server/db/fixtures/demo-resume.tex"),
@@ -916,5 +917,21 @@ describe("today: interviews, follow-ups, activity", () => {
     await todayDal.addInterview(interview(app.id, new Date(Date.now() + DAY)));
     await applicationsDal.deleteApplication(app.id);
     expect(testDb.select().from(schema.interviews).all()).toEqual([]);
+  });
+});
+
+describe("insights: the pipeline", () => {
+  it("counts only your own applications and their history", async () => {
+    as(ALICE);
+    const app = await applicationsDal.createApplication({ company: "Acme", title: "Engineer", status: "applied" });
+    await applicationsDal.moveApplicationStatus(app.id, "interviewing");
+    await todayDal.addInterview({ applicationId: app.id, at: new Date(Date.now() - 60_000), durationMinutes: 30, kind: "phone_screen", location: undefined, notes: undefined });
+    expect((await insightsService.getPipeline()).funnel.map((f) => f.count)).toEqual([1, 1, 1, 0]);
+
+    as(BOB);
+    await applicationsDal.createApplication({ company: "Globex", title: "Dev", status: "applied" });
+    const bobs = await insightsService.getPipeline();
+    expect(bobs.total).toBe(1);
+    expect(bobs.funnel.map((f) => f.count)).toEqual([1, 0, 0, 0]);
   });
 });

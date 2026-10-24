@@ -2,14 +2,15 @@
 // seed use it with their own connection. Every query filters by owner;
 // the app reaches it through server/insights.ts, which passes
 // requireUserId().
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "@/server/db/schema";
-import { applications, comparisonSkills, comparisons, jobs, profileSkills, resumes } from "@/server/db/schema";
+import { applications, comparisonSkills, comparisons, interviews, jobs, profileSkills, resumes, statusEvents } from "@/server/db/schema";
 import { skillResolverFor } from "@/server/db/comparison-store";
 import { listingChangedSince } from "@/lib/listing";
 import type { InsightJob, InsightProfileSkill } from "@/lib/insights/build";
 import { splitSkillPhrases } from "@/lib/insights/skills";
+import type { PipelineApplication } from "@/lib/insights/pipeline";
 
 type AppDb = BetterSQLite3Database<typeof schema>;
 
@@ -115,4 +116,37 @@ export function jobsToCompare(db: AppDb, userId: number): { jobId: number; compa
     .orderBy(desc(jobs.savedAt), desc(jobs.id))
     .all()
     .flatMap((job) => (job.listingText?.trim() && !compared.has(job.jobId) ? [{ ...job, listingText: job.listingText }] : []));
+}
+
+// What the pipeline (lib/insights/pipeline.ts) is built from: every
+// application's status, its history in recorded order, and whether it had
+// an interview before `now`. Three small queries, grouped here.
+export function pipelineInputs(db: AppDb, userId: number, now: Date): PipelineApplication[] {
+  const rows = db
+    .select({ id: applications.id, status: applications.status })
+    .from(applications)
+    .where(eq(applications.userId, userId))
+    .all();
+  const steps = db
+    .select({ applicationId: statusEvents.applicationId, to: statusEvents.toStatus, at: statusEvents.at, source: statusEvents.source })
+    .from(statusEvents)
+    .where(eq(statusEvents.userId, userId))
+    .orderBy(asc(statusEvents.applicationId), asc(statusEvents.id))
+    .all();
+  const interviewed = new Set(
+    db
+      .selectDistinct({ applicationId: interviews.applicationId })
+      .from(interviews)
+      .where(and(eq(interviews.userId, userId), lt(interviews.at, now)))
+      .all()
+      .map((row) => row.applicationId),
+  );
+
+  const byApplication = new Map<number, PipelineApplication["steps"]>();
+  for (const step of steps) {
+    const list = byApplication.get(step.applicationId) ?? [];
+    list.push({ to: step.to, at: step.at, estimated: step.source === "estimated" });
+    byApplication.set(step.applicationId, list);
+  }
+  return rows.map((row) => ({ status: row.status, steps: byApplication.get(row.id) ?? [], hadInterview: interviewed.has(row.id) }));
 }

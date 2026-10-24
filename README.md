@@ -20,7 +20,7 @@ Built with Next.js (App Router), TypeScript, SQLite, and the Anthropic API. It r
 - **Tailored resumes.** The model picks, orders, and lightly rewords content from your profile for one listing. Code checks the result, you review every change, and the approved version is compiled from your LaTeX source to a one-page PDF.
 - **Cover letters.** Written from the listing, the tailored resume, and your highlights, with tone and length options. You can edit them before sending.
 - **Gmail sync.** Finds application emails (confirmations, interviews, rejections) and suggests status changes in a review inbox. Nothing on the board moves until you confirm it.
-- **Insights.** Which skills your listings ask for most often that your resume doesn't show, and how that lines up with outcomes. It reports counts, never causes.
+- **Insights.** How far your applications get (a funnel from applied to offer) and how long each step takes, which skills your listings ask for most often that your resume doesn't show, and how that lines up with outcomes. It reports counts, never causes.
 
 | Today | Application page |
 |---|---|

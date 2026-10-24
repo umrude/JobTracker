@@ -112,6 +112,14 @@ test("insights load from the seeded history", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Insights" })).toBeVisible();
   await expect(page.getByText(/^\d+ listings analyzed$/)).toBeVisible();
   await expect(page.getByText("Most often missing")).toBeVisible();
+
+  // The pipeline, from the status history: the funnel and time in each stage.
+  await expect(page.getByRole("heading", { name: "How far applications get" })).toBeVisible();
+  const funnel = page.getByRole("list").filter({ hasText: "Heard back" });
+  for (const stage of ["Applied", "Heard back", "Interviewed", "Offer"]) {
+    await expect(funnel.getByText(stage, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByText("Applied to first reply")).toBeVisible();
 });
 
 test("the theme and the collapsed sidebar are remembered across reloads", async ({ page }) => {

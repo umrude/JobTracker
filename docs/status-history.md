@@ -7,7 +7,7 @@ The board shows where each application is now. Phase 7 keeps where it's been: ev
 | 7a | The history itself: recorded on every status change, backfilled for older applications | Done |
 | 7b | An application page with the timeline, its comparison, and its emails | Done |
 | 7c | Follow-ups: a "Today" view with nudges and upcoming interviews ([today.md](today.md)) | Done |
-| 7d | Insights: a funnel and time in each stage | |
+| 7d | Insights: a funnel and time in each stage ([insights.md](insights.md), "The pipeline") | Done |
 
 ## Decisions
 

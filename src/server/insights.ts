@@ -3,11 +3,12 @@ import { getDb } from "@/server/db/client";
 import { getMode } from "@/server/mode";
 import { env } from "@/server/env";
 import { requireUserId } from "@/server/current-user";
-import { insightInputs, jobsToCompare } from "@/server/db/insights-store";
+import { insightInputs, jobsToCompare, pipelineInputs } from "@/server/db/insights-store";
 import { getActiveResume } from "@/server/db/resumes";
 import { runComparison } from "@/server/comparisons";
 import { buildInsights, type Insights, type InsightScope } from "@/lib/insights/build";
 import { estimateComparisonUsd } from "@/lib/llm-pricing";
+import { buildPipeline, type Pipeline } from "@/lib/insights/pipeline";
 
 // The Insights page (docs/insights.md): its numbers, and "Compare all" for
 // jobs with a listing that haven't been compared yet.
@@ -20,6 +21,14 @@ export async function getInsights(scopeName: InsightScope): Promise<Insights> {
   const { db, userId } = await scope();
   const { jobs, profileSkills } = insightInputs(db, userId);
   return buildInsights(jobs, profileSkills, scopeName);
+}
+
+// How applications move through the search: the funnel and time in each
+// stage, from the status history. Every application counts, listing or
+// not, so it doesn't follow the page's "Which listings" choice.
+export async function getPipeline(now = new Date()): Promise<Pipeline> {
+  const { db, userId } = await scope();
+  return buildPipeline(pipelineInputs(db, userId, now));
 }
 
 export type CompareAllPlan = {

@@ -8,6 +8,7 @@ Phase 5. A recap of which skills your applications keep asking for that your res
 | 5b | The insight numbers (pure, tested) | Done |
 | 5c | The Insights page, and comparing several jobs at once | Done |
 | 5d | Demo seed, docs, end-to-end check | Done |
+| 7d | The pipeline: a funnel and time in each stage, from the status history | Done |
 
 ## Decisions
 
@@ -190,3 +191,60 @@ A skill your resume doesn't show at all is missing in every comparison that asks
 ### Checked end to end
 
 `pnpm build`, then `DEMO_MODE=true pnpm start` against the reseeded demo. Insights rendered in both scopes, with 21 listings analyzed, the screening columns, and the counts above. Every other page still rendered, each in under about 100 ms on the server.
+
+## The pipeline (Phase 7d)
+
+"How far applications get", at the top of the page, is built from the status history (docs/status-history.md). It counts every application, listing or not, so the "Skill gaps from" choice below it doesn't apply.
+
+### The funnel
+
+For each stage, how many applications **ever reached it**, as a count and a share of all applications:
+
+| Stage | Reached when |
+|---|---|
+| Applied | Every application |
+| Heard back | It was ever Acknowledged, Interviewing, Offer, or Rejected. Any reply counts, rejections included; Ghosted doesn't. |
+| Interviewed | It was ever Interviewing or Offer, or it has an interview in the past (Today's interviews) |
+| Offer | It ever reached Offer |
+
+"Ever" matters: an application rejected after two interviews still counts as interviewed. Under the bars, the page also shows how many are still waiting to hear back and how many were ghosted.
+
+### Time in each stage
+
+Median days, with the range and how many applications they come from:
+
+- **Applied to first reply:** from the "applied" step to the first reply (any of the heard-back statuses).
+- **Acknowledged to interview:** from Acknowledged to Interviewing.
+- **Interview to offer or rejection:** from Interviewing to the decision.
+
+Only steps with real dates count:
+
+- **Estimated steps are left out.** Their dates were guessed when older applications' history was reconstructed. They still count toward the funnel, since the stage really was reached.
+- **Out-of-order steps are left out too.** A step dated before the one it follows (an old email confirmed late) gives no meaningful duration.
+- **Small samples are labeled.** Fewer than 5 is marked "too few to say much", the same threshold as the rest of the page.
+
+It's still counts, not causes: a slow reply says nothing about why.
+
+### Code
+
+- **The rules:** `lib/insights/pipeline.ts` (`buildPipeline`), pure and unit-tested. It covers reach "ever", past interviews counting, estimated and out-of-order steps left out, and medians and small samples.
+- **The inputs:** `pipelineInputs` in `server/db/insights-store.ts`, three small queries (applications, their history in recorded order, and past interviews), grouped in memory.
+- **The service:** `getPipeline` in `server/insights.ts`.
+- **The card:** `insights/_components/pipeline-card.tsx`, a Server Component.
+- **Tests:** an isolation case (it counts only your own applications), and an e2e check of the card on the demo.
+
+### How it's drawn
+
+The funnel is one series of ordered stages, so it's horizontal bars:
+
+- **One color,** the app's primary. It was checked against both surfaces with the data-visualization palette validator, and passes in light and dark.
+- **Muted tracks** show the whole behind each bar.
+- **Square at the baseline,** with a 4px rounded end at the value.
+- **Numbers in the normal text colors,** never the bar's.
+- **Hidden from screen readers:** the bars are decoration; the list of stages and counts is the data.
+
+Time in each stage is a row of stat tiles rather than a chart, since each is a single number.
+
+### Demo
+
+The older demo applications (`SEED_HISTORY`) now have dated histories generated from their outcomes (`datedHistory` in the seed). The generator varies reply and interview times by position, but every seed is the same. With the showcase applications, the demo shows a full funnel (34 applied, 28 heard back, 17 interviewed, 4 offers) and every timing with a sample of 10 or more.

@@ -748,12 +748,17 @@ function seedTailoring(
 // then each step. An email step also stores the confirmed email behind it
 // (metadata and snippet, as the real sync would), so the application's
 // page lists it and the timeline names it.
-function seedApplicationHistory(db: ProfileDb, userId: number, applicationId: number, seedApp: SeedApplication) {
+function seedApplicationHistory(
+  db: ProfileDb,
+  userId: number,
+  applicationId: number,
+  seedApp: { company: string; status: Status; appliedDaysAgo?: number; savedDaysAgo?: number; history?: SeedStep[] },
+) {
   const steps = seedApp.history ?? [];
   if (steps.at(-1)?.to !== seedApp.status) {
     throw new Error(`${seedApp.company}'s seeded history doesn't end at its status (${seedApp.status}).`);
   }
-  const applied = daysAgo(seedApp.appliedDaysAgo ?? seedApp.savedDaysAgo);
+  const applied = daysAgo(seedApp.appliedDaysAgo ?? seedApp.savedDaysAgo ?? 0);
   recordCreation(db, userId, { applicationId, status: "applied", appliedAt: applied, at: applied, source: "board" });
 
   let current: Status = "applied";
@@ -801,8 +806,34 @@ function seedApplicationHistory(db: ProfileDb, userId: number, applicationId: nu
   });
 }
 
+// A plausible, dated history for an older demo application, from where it
+// ended up, so the Insights pipeline has real durations to show (docs/
+// insights.md, "The pipeline"). Reply and interview times vary by position
+// in the list, so the numbers aren't all the same, but every seed is the
+// same. Each step is a day or more after the one before.
+function datedHistory(status: Status, passedScreening: boolean, appliedDaysAgo: number, index: number): SeedStep[] {
+  if (status === "ghosted") return [{ to: "ghosted", daysAgo: appliedDaysAgo - GHOSTED_AFTER_DAYS - 1, via: "ghosted" }];
+  const steps: SeedStep[] = [];
+  let day = appliedDaysAgo;
+  const next = (to: Status, after: number) => {
+    day = Math.max(Math.min(day - after, day - 1), 0);
+    steps.push({ to, daysAgo: day, via: "board" });
+  };
+  const replyAfter = 3 + ((index * 4) % 10);
+  const interviewAfter = 4 + ((index * 7) % 12);
+  // Some rejections are the first reply; the rest were acknowledged first.
+  if (status === "rejected" && !passedScreening && index % 3 === 0) {
+    next("rejected", replyAfter);
+    return steps;
+  }
+  next("acknowledged", replyAfter);
+  if (passedScreening || status === "interviewing" || status === "offer") next("interviewing", interviewAfter);
+  if (status === "rejected" || status === "offer") next(status, 6 + ((index * 5) % 15));
+  return steps;
+}
+
 function seedHistory(db: ProfileDb, userId: number, resumeId: number) {
-  for (const app of SEED_HISTORY) {
+  for (const [index, app] of SEED_HISTORY.entries()) {
     const listingText = historyListing(app);
     const job = db
       .insert(schema.jobs)
@@ -817,7 +848,8 @@ function seedHistory(db: ProfileDb, userId: number, resumeId: number) {
       .returning({ id: schema.jobs.id })
       .get();
     const updatedDaysAgo = app.updatedDaysAgo ?? Math.max(app.appliedDaysAgo - 20, 35);
-    db.insert(schema.applications)
+    const application = db
+      .insert(schema.applications)
       .values({
         userId,
         jobId: job.id,
@@ -827,7 +859,14 @@ function seedHistory(db: ProfileDb, userId: number, resumeId: number) {
         passedScreeningAt:
           app.passedScreening || statusImpliesScreening(app.status) ? daysAgo(Math.max(app.appliedDaysAgo - 7, updatedDaysAgo)) : null,
       })
-      .run();
+      .returning({ id: schema.applications.id })
+      .get();
+    seedApplicationHistory(db, userId, application.id, {
+      company: app.company,
+      status: app.status,
+      appliedDaysAgo: app.appliedDaysAgo,
+      history: datedHistory(app.status, Boolean(app.passedScreening), app.appliedDaysAgo, index),
+    });
 
     if (!app.skills) continue;
     const { matched, missing } = app.skills;

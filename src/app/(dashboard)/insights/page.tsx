@@ -3,7 +3,8 @@ import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { isWritable } from "@/server/mode";
 import { requireSession } from "@/server/require-session";
-import { getCompareAllPlan, getInsights } from "@/server/insights";
+import { getCompareAllPlan, getInsights, getPipeline } from "@/server/insights";
+import { PipelineCard } from "./_components/pipeline-card";
 import { MIN_SAMPLE, SCREENING_MIN, type Insights, type JobRef, type ProfileStanding, type SkillInsight, type Tally } from "@/lib/insights/build";
 import { cn } from "@/lib/utils";
 import { CompareAllButton } from "./_components/compare-all-button";
@@ -20,7 +21,7 @@ const scopeSchema = z.enum(["all", "applied"]).catch("all");
 export default async function InsightsPage({ searchParams }: PageProps<"/insights">) {
   await requireSession();
   const scope = scopeSchema.parse((await searchParams).scope);
-  const [insights, plan] = await Promise.all([getInsights(scope), getCompareAllPlan()]);
+  const [insights, plan, pipeline] = await Promise.all([getInsights(scope), getCompareAllPlan(), getPipeline()]);
   const writable = isWritable();
 
   const missing = insights.skills.filter((skill) => skill.missing > 0);
@@ -28,15 +29,23 @@ export default async function InsightsPage({ searchParams }: PageProps<"/insight
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Insights</h1>
-          <p className="text-sm text-muted-foreground">
-            What your listings ask for that your resume doesn&apos;t show, and how that lines up with outcomes. Counts, not
-            causes.
-          </p>
-        </div>
-        <nav className="flex gap-1 rounded-lg border bg-card p-1 text-sm" aria-label="Which listings">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Insights</h1>
+        <p className="text-sm text-muted-foreground">
+          How your applications are going, what your listings ask for that your resume doesn&apos;t show, and how that lines
+          up with outcomes. Counts, not causes.
+        </p>
+      </div>
+
+      {/* Every application, listing or not: the choice below doesn't apply. */}
+      <PipelineCard pipeline={pipeline} />
+
+      {/* Which listings the skill-gap sections below count. */}
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <p id="insights-scope" className="text-sm font-medium">
+          Skill gaps from
+        </p>
+        <nav className="flex gap-1 rounded-lg border bg-card p-1 text-sm" aria-labelledby="insights-scope">
           <ScopeLink scope="all" current={scope}>
             All compared listings
           </ScopeLink>
