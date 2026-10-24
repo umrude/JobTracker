@@ -58,6 +58,13 @@ const envShape = z.object({
   // Where the app is reached, for the Gmail OAuth redirect URI (which must
   // match the one registered with Google exactly).
   APP_URL: z.url().optional().default("http://localhost:3000"),
+  // GoatCounter's count endpoint (https://<code>.goatcounter.com/count), for
+  // anonymous visit counts on the public demo only. Ignored everywhere else,
+  // so the live app never sends anything about you. See "Hosted demo" in
+  // the README.
+  GOATCOUNTER_URL: optionalString(
+    z.url({ protocol: /^https$/, error: "must be an https:// URL, like https://<code>.goatcounter.com/count" }),
+  ),
 });
 
 // Parsed once, in env.ts; tests use it directly.

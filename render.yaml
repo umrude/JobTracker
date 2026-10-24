@@ -25,3 +25,8 @@ services:
         value: "22.23.4"
       - key: NEXT_TELEMETRY_DISABLED
         value: "1"
+      # Anonymous visit counts (GoatCounter: no cookies, no personal data).
+      # Not a secret: it ends up in the page anyway. The demo only; the live
+      # app never loads it (src/components/demo-analytics.tsx).
+      - key: GOATCOUNTER_URL
+        value: "https://2rats.goatcounter.com/count"

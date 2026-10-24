@@ -163,6 +163,8 @@ What keeps it safe to leave public:
 - **The auth routes return 404.**
 - **Every response gets basic security headers:** no framing, no MIME sniffing, and a strict referrer policy.
 
+**Visit counts:** the hosted demo counts visits with [GoatCounter](https://www.goatcounter.com/), set by `GOATCOUNTER_URL` in `render.yaml`. It records pages, referrers, and rough location, with no cookies and nothing personal. It runs in the visitor's browser, so the demo server itself still makes no outside calls. Only the public demo loads it: the live app, local development, and CI never do, even with the variable set.
+
 CI runs the end-to-end tests against this exact build. To check the deployed demo itself, point the same tests at it: `E2E_BASE_URL=https://job-tracker-demo-f7ye.onrender.com pnpm test:e2e`.
 
 ### Commands

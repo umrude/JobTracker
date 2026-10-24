@@ -25,3 +25,15 @@ describe("envSchema", () => {
     expect(envSchema.safeParse({ DEMO_MODE: "true", ALLOWED_EMAIL: "not-an-email" }).success).toBe(false);
   });
 });
+
+describe("GOATCOUNTER_URL", () => {
+  it("is optional, and must be https when set", () => {
+    expect(envSchema.parse({ DEMO_MODE: "true" }).GOATCOUNTER_URL).toBeUndefined();
+    expect(envSchema.parse({ DEMO_MODE: "true", GOATCOUNTER_URL: "" }).GOATCOUNTER_URL).toBeUndefined();
+    expect(envSchema.parse({ DEMO_MODE: "true", GOATCOUNTER_URL: "https://demo.goatcounter.com/count" }).GOATCOUNTER_URL).toBe(
+      "https://demo.goatcounter.com/count",
+    );
+    expect(envSchema.safeParse({ DEMO_MODE: "true", GOATCOUNTER_URL: "http://demo.goatcounter.com/count" }).success).toBe(false);
+    expect(envSchema.safeParse({ DEMO_MODE: "true", GOATCOUNTER_URL: "not a url" }).success).toBe(false);
+  });
+});
